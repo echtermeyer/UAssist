@@ -1,10 +1,23 @@
 require('dotenv').config();
 const { MongoClient } = require('mongodb');
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
-const SIGNAL_PHONE = process.env.SIGNAL_PHONE;
+function detectSignalAccount() {
+    if (process.env.SIGNAL_PHONE) return process.env.SIGNAL_PHONE;
+    try {
+        const accountsPath = path.join(process.env.HOME, '.local/share/signal-cli/data/accounts.json');
+        const data = JSON.parse(fs.readFileSync(accountsPath, 'utf-8'));
+        return data.accounts?.[0]?.number;
+    } catch {
+        return null;
+    }
+}
+
+const SIGNAL_PHONE = detectSignalAccount();
 if (!SIGNAL_PHONE) {
-    console.error('SIGNAL_PHONE env var required');
+    console.error('No Signal account found. Link a device first: signal-cli link -n "UAssist VM"');
     process.exit(1);
 }
 
