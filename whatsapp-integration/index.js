@@ -28,7 +28,7 @@ const client = new Client({
         dataPath: WA_DATA_PATH,
     }),
     puppeteer: {
-        executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium-browser',
+        executablePath: process.env.CHROMIUM_PATH || '/usr/bin/google-chrome',
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     },
 });
