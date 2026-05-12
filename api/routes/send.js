@@ -13,6 +13,7 @@ router.post('/whatsapp', async (req, res, next) => {
             to,
             message,
             status: 'pending',
+            tenantId: req.user.tenantId,
             _createdAt: new Date(),
         });
         res.status(202).json({ id: result.insertedId, status: 'pending' });

@@ -29,7 +29,8 @@ client.on('ready', async () => {
 
     // Poll outbox for pending messages to send
     setInterval(async () => {
-        const pending = await outbox.find({ status: 'pending' }).toArray();
+        const tenantFilter = process.env.TENANT_ID ? { status: 'pending', tenantId: process.env.TENANT_ID } : { status: 'pending' };
+        const pending = await outbox.find(tenantFilter).toArray();
         for (const job of pending) {
             try {
                 await client.sendMessage(`${job.to}@c.us`, job.message);
@@ -45,7 +46,7 @@ client.on('message', async msg => {
     const chat = await msg.getChat();
     console.log(`[${chat.name}] ${msg.body}`);
     try {
-        await collection.insertOne({ ...msg, _chat: chat.name, _savedAt: new Date() });
+        await collection.insertOne({ ...msg, _chat: chat.name, tenantId: process.env.TENANT_ID || 'default', _savedAt: new Date() });
     } catch (err) {
         console.error('Failed to save message:', err.message);
     }

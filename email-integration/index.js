@@ -63,6 +63,7 @@ async function run() {
                 bodyText,
                 bodyHtml,
                 _account: EMAIL,
+                tenantId: process.env.TENANT_ID || 'default',
                 _savedAt: new Date()
             }));
             await collection.insertOne(doc);
