@@ -200,4 +200,35 @@ router.post('/email', async (req, res, next) => {
     }
 });
 
+// ── Slack ──────────────────────────────────────────────────────────────────────
+
+// POST /onboard/slack — save Bot Token + App Token, provision Slack process
+router.post('/slack', async (req, res, next) => {
+    const { tenantId } = req.user;
+    const { botToken, appToken } = req.body;
+    if (!botToken || !appToken) return res.status(400).json({ error: 'botToken and appToken required' });
+    try {
+        await getDb().collection('users').updateOne(
+            { username: req.user.username },
+            { $set: { 'onboarding.slack': 'connected', slackBotToken: botToken, slackAppToken: appToken } }
+        );
+        await provisionTenant(tenantId, { slackBotToken: botToken });
+        res.json({ status: 'connected' });
+    } catch (err) {
+        next(err);
+    }
+});
+
+// GET /onboard/slack/status
+router.get('/slack/status', async (req, res, next) => {
+    const { tenantId } = req.user;
+    try {
+        const user = await getDb().collection('users').findOne({ tenantId });
+        const status = user?.onboarding?.slack || 'idle';
+        res.json({ status });
+    } catch (err) {
+        next(err);
+    }
+});
+
 module.exports = router;

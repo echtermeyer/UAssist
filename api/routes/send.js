@@ -44,4 +44,21 @@ router.post('/email', async (req, res, next) => {
     }
 });
 
+router.post('/slack', async (req, res, next) => {
+    const { to, message } = req.body;
+    if (!to || !message) return res.status(400).json({ error: 'to and message are required' });
+    try {
+        const result = await getDb().collection('slack_outbox').insertOne({
+            to,
+            message,
+            status: 'pending',
+            tenantId: req.user.tenantId,
+            _createdAt: new Date(),
+        });
+        res.status(202).json({ id: result.insertedId, status: 'pending' });
+    } catch (err) {
+        next(err);
+    }
+});
+
 module.exports = router;

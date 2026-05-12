@@ -28,7 +28,7 @@ function writeEcosystem(config) {
     fs.writeFileSync(ECOSYSTEM_PATH, content, 'utf-8');
 }
 
-async function provisionTenant(tenantId, { emailAddress, emailPassword, signalPhone } = {}) {
+async function provisionTenant(tenantId, { emailAddress, emailPassword, signalPhone, slackBotToken } = {}) {
     const config = readEcosystem();
 
     const newApps = [];
@@ -78,6 +78,22 @@ async function provisionTenant(tenantId, { emailAddress, emailPassword, signalPh
                     MONGO_URL,
                     TENANT_ID: tenantId,
                     // No EMAIL/PASSWORD here — process reads from MongoDB users collection
+                },
+            });
+        }
+    }
+
+    // Slack process — tokens are read from MongoDB by the process itself
+    if (slackBotToken) {
+        const slackName = `slack_${tenantId}`;
+        if (!config.apps.find(a => a.name === slackName)) {
+            newApps.push({
+                name: slackName,
+                script: `${UASSIST_ROOT}/slack-integration/index.js`,
+                cwd: `${UASSIST_ROOT}/slack-integration`,
+                env: {
+                    MONGO_URL,
+                    TENANT_ID: tenantId,
                 },
             });
         }

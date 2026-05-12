@@ -3,9 +3,9 @@
 import { useState, useEffect, useRef } from "react"
 import { Mail, MessageCircle, ShieldCheck, Check, ChevronDown, Eye, EyeOff, Link2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { startWhatsAppOnboard, pollWhatsAppStatus, startSignalOnboard, pollSignalStatus, connectEmail } from "@/lib/api"
+import { startWhatsAppOnboard, pollWhatsAppStatus, startSignalOnboard, pollSignalStatus, connectEmail, connectSlack } from "@/lib/api"
 
-type IntegrationId = "email" | "whatsapp" | "signal"
+type IntegrationId = "email" | "whatsapp" | "signal" | "slack"
 type OnboardStatus = "idle" | "pending" | "connected" | "linked" | "error"
 
 const STORAGE_KEY = "ua_integrations"
@@ -105,6 +105,93 @@ function EmailCard({ connected, onConnect }: { connected: boolean; onConnect: ()
           <button
             onClick={handleConnect}
             disabled={!emailVal || !passwordVal || loading}
+            className="mt-1 w-full py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {loading ? "Connecting…" : "Connect"}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Slack card ─────────────────────────────────────────────────────────────────
+
+function SlackCard({ connected, onConnect }: { connected: boolean; onConnect: () => void }) {
+  const [expanded, setExpanded] = useState(false)
+  const [botToken, setBotToken] = useState("")
+  const [appToken, setAppToken] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+
+  async function handleConnect() {
+    if (!botToken || !appToken) return
+    setLoading(true)
+    setError("")
+    try {
+      await connectSlack(botToken, appToken)
+      onConnect()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Connection failed")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className={cn("rounded-2xl bg-white border shadow-sm overflow-hidden", connected ? "border-emerald-200" : "border-zinc-200")}>
+      <button
+        onClick={() => !connected && setExpanded(v => !v)}
+        disabled={connected}
+        className="w-full flex items-center gap-4 p-5 text-left disabled:cursor-default"
+      >
+        <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0 bg-purple-50">
+          <svg className="h-5 w-5 text-purple-600" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/>
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm text-zinc-900">Slack</p>
+          <p className="text-xs text-zinc-500 mt-0.5">Receive and send Slack messages via Socket Mode</p>
+        </div>
+        {connected ? (
+          <span className="flex items-center gap-1.5 bg-emerald-100 text-emerald-700 text-xs font-semibold px-2.5 py-1 rounded-full shrink-0">
+            <Check className="h-3 w-3" /> Connected
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-zinc-400 text-xs font-medium shrink-0">
+            Set up <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-180")} />
+          </span>
+        )}
+      </button>
+
+      {!connected && expanded && (
+        <div className="px-5 pb-5 border-t border-zinc-100 pt-4 flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Bot Token</label>
+            <input
+              type="password"
+              value={botToken}
+              onChange={e => setBotToken(e.target.value)}
+              placeholder="xoxb-…"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-zinc-200 bg-zinc-50 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">App-Level Token</label>
+            <input
+              type="password"
+              value={appToken}
+              onChange={e => setAppToken(e.target.value)}
+              placeholder="xapp-…"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-zinc-200 bg-zinc-50 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+            />
+            <p className="text-[11px] text-zinc-400">Requires <code className="font-mono">connections:write</code> scope. Create at api.slack.com/apps.</p>
+          </div>
+          {error && <p className="text-xs text-rose-600">{error}</p>}
+          <button
+            onClick={handleConnect}
+            disabled={!botToken || !appToken || loading}
             className="mt-1 w-full py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {loading ? "Connecting…" : "Connect"}
@@ -333,6 +420,7 @@ export function IntegrationsPanel() {
 
         <div className="space-y-3">
           <EmailCard connected={connected.has("email")} onConnect={() => mark("email")} />
+          <SlackCard connected={connected.has("slack")} onConnect={() => mark("slack")} />
           <QRCard
             id="whatsapp"
             name="WhatsApp"

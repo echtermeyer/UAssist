@@ -2,7 +2,7 @@ const { Router } = require('express');
 const { getDb } = require('../lib/db');
 
 const router = Router();
-const SERVICES = ['whatsapp', 'signal', 'email'];
+const SERVICES = ['whatsapp', 'signal', 'email', 'slack'];
 
 router.get('/', async (req, res, next) => {
     const { tenantId, role } = req.user;

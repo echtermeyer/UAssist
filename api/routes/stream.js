@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
     res.flushHeaders();
 
     const db = getDb();
-    const SERVICES = ['whatsapp', 'signal', 'email'];
+    const SERVICES = ['whatsapp', 'signal', 'email', 'slack'];
     const filter = role === 'admin' ? {} : { tenantId };
 
     const pipeline = [{ $match: { operationType: 'insert', 'fullDocument.tenantId': tenantId } }];

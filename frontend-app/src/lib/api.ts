@@ -19,7 +19,7 @@ export function clearToken() {
 
 export type RawMessage = {
   _id: string
-  _service: "whatsapp" | "email" | "signal"
+  _service: "whatsapp" | "email" | "signal" | "slack"
   _savedAt: string
   tenantId: string
   envelope?: { from?: { address?: string; name?: string }[]; subject?: string }
@@ -79,7 +79,7 @@ export async function signup(username: string, password: string) {
 
 // ── Messages ─────────────────────────────────────────────────────────────────
 
-export async function fetchMessages(service?: "whatsapp" | "email" | "signal"): Promise<RawMessage[]> {
+export async function fetchMessages(service?: "whatsapp" | "email" | "signal" | "slack"): Promise<RawMessage[]> {
   const path = service ? `/messages/${service}` : "/messages"
   return apiFetch<RawMessage[]>(path)
 }
@@ -145,6 +145,10 @@ export async function sendSignal(to: string, message: string) {
   return apiFetch("/send/signal", { method: "POST", body: JSON.stringify({ to, message }) })
 }
 
+export async function sendSlack(to: string, message: string) {
+  return apiFetch("/send/slack", { method: "POST", body: JSON.stringify({ to, message }) })
+}
+
 // ── Onboarding ────────────────────────────────────────────────────────────────
 
 export async function startWhatsAppOnboard() {
@@ -165,4 +169,8 @@ export async function pollSignalStatus(): Promise<{ status: string; linkUri: str
 
 export async function connectEmail(email: string, password: string) {
   return apiFetch("/onboard/email", { method: "POST", body: JSON.stringify({ email, password }) })
+}
+
+export async function connectSlack(botToken: string, appToken: string) {
+  return apiFetch("/onboard/slack", { method: "POST", body: JSON.stringify({ botToken, appToken }) })
 }
