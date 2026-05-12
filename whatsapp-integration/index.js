@@ -27,7 +27,10 @@ const client = new Client({
         clientId: TENANT_ID,
         dataPath: WA_DATA_PATH,
     }),
-    puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
+    puppeteer: {
+        executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium-browser',
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    },
 });
 
 client.on('qr', async qr => {
