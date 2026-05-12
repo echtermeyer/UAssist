@@ -21,6 +21,8 @@ if (!SIGNAL_PHONE) {
     process.exit(1);
 }
 
+const SIGNAL_CLI = process.env.SIGNAL_CLI_PATH || 'signal-cli';
+
 function resolveContactName(contact) {
     if (contact.name) return contact.name;
     const given = contact.givenName || contact.profile?.givenName || '';
@@ -30,7 +32,7 @@ function resolveContactName(contact) {
 
 async function syncContacts(db) {
     try {
-        const output = execFileSync('signal-cli', ['-a', SIGNAL_PHONE, '--output=json', 'listContacts'], {
+        const output = execFileSync(SIGNAL_CLI, ['-a', SIGNAL_PHONE, '--output=json', 'listContacts'], {
             timeout: 30000,
         }).toString();
         const contacts = JSON.parse(output);
@@ -62,7 +64,7 @@ async function run() {
     // Sync contacts first (before spawning receive which holds the lock)
     const contactsCol = await syncContacts(db);
 
-    const proc = spawn('signal-cli', ['-a', SIGNAL_PHONE, '--output=json', 'receive', '-t', '-1'], {
+    const proc = spawn(SIGNAL_CLI, ['-a', SIGNAL_PHONE, '--output=json', 'receive', '-t', '-1'], {
         stdio: ['ignore', 'pipe', 'pipe'],
     });
 
