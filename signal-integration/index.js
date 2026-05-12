@@ -27,7 +27,7 @@ async function run() {
     const collection = mongo.db().collection('signal');
     console.log('✅ MongoDB ready!');
 
-    const proc = spawn('signal-cli', ['-a', SIGNAL_PHONE, '--output=json', 'receive', '--watch'], {
+    const proc = spawn('signal-cli', ['-a', SIGNAL_PHONE, '--output=json', 'receive', '-t', '-1'], {
         stdio: ['ignore', 'pipe', 'pipe'],
     });
 
