@@ -48,29 +48,34 @@ router.post('/whatsapp', async (req, res, next) => {
 
     activeSessions.set(`wa_${tenantId}`, { proc });
 
+    // Buffer stdout to handle large QR base64 strings split across multiple chunks
+    let stdoutBuf = '';
     proc.stdout.on('data', async chunk => {
-        const text = chunk.toString();
-        // The onboard-mode process emits lines like: QR:<base64data>
-        const qrMatch = text.match(/^QR:(.+)$/m);
-        if (qrMatch) {
-            await db.collection('onboarding').updateOne(
-                { tenantId, service: 'whatsapp' },
-                { $set: { qr: qrMatch[1], _updatedAt: new Date() } }
-            );
-        }
-        const readyMatch = text.match(/^READY:(.+)$/m);
-        if (readyMatch) {
-            await db.collection('onboarding').updateOne(
-                { tenantId, service: 'whatsapp' },
-                { $set: { status: 'connected', qr: null, _updatedAt: new Date() } }
-            );
-            await db.collection('users').updateOne(
-                { username: req.user.username },
-                { $set: { 'onboarding.whatsapp': 'connected' } }
-            );
-            activeSessions.delete(`wa_${tenantId}`);
-            // Provision the persistent process
-            provisionTenant(tenantId).catch(console.error);
+        stdoutBuf += chunk.toString();
+        const lines = stdoutBuf.split('\n');
+        stdoutBuf = lines.pop(); // keep incomplete last line in buffer
+        for (const line of lines) {
+            if (line.startsWith('QR:')) {
+                const qrData = line.slice(3).trim();
+                if (qrData) {
+                    await db.collection('onboarding').updateOne(
+                        { tenantId, service: 'whatsapp' },
+                        { $set: { qr: qrData, _updatedAt: new Date() } }
+                    );
+                }
+            } else if (line.startsWith('READY:')) {
+                await db.collection('onboarding').updateOne(
+                    { tenantId, service: 'whatsapp' },
+                    { $set: { status: 'connected', qr: null, _updatedAt: new Date() } }
+                );
+                await db.collection('users').updateOne(
+                    { username: req.user.username },
+                    { $set: { 'onboarding.whatsapp': 'connected' } }
+                );
+                activeSessions.delete(`wa_${tenantId}`);
+                // Provision the persistent process
+                provisionTenant(tenantId).catch(console.error);
+            }
         }
     });
 
