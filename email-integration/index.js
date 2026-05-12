@@ -47,16 +47,25 @@ async function run() {
     const lock = await client.getMailboxLock('INBOX');
 
     client.on('exists', async data => {
-        const msg = await client.fetchOne(data.count, { envelope: true, bodyStructure: true });
+        const msg = await client.fetchOne(data.count, { envelope: true, bodyStructure: true, bodyParts: ['1', '2'] });
         if (!msg) return;
-        console.log(`📧 [${msg.envelope?.from?.[0]?.address}] ${msg.envelope?.subject}`);
-        console.log('msg keys:', Object.keys(msg));
-        console.log('msg JSON:', JSON.stringify(msg));
+
+        const subject = msg.envelope?.subject;
+        const from = msg.envelope?.from?.[0]?.address;
+        console.log(`📧 [${from}] ${subject}`);
+
+        const bodyText = msg.bodyParts?.get('1')?.toString('utf-8')?.trim() || null;
+        const bodyHtml = msg.bodyParts?.get('2')?.toString('utf-8')?.trim() || null;
+
         try {
-            const doc = JSON.parse(JSON.stringify({ ...msg, _account: EMAIL, _savedAt: new Date() }));
-            console.log('inserting doc:', JSON.stringify(doc));
-            const result = await collection.insertOne(doc);
-            console.log('inserted:', result.insertedId);
+            const doc = JSON.parse(JSON.stringify({
+                ...msg,
+                bodyText,
+                bodyHtml,
+                _account: EMAIL,
+                _savedAt: new Date()
+            }));
+            await collection.insertOne(doc);
         } catch (err) {
             console.error('Failed to save message:', err);
         }
