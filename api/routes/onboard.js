@@ -36,22 +36,23 @@ router.post('/whatsapp', async (req, res, next) => {
     // Ensure the tenant's Linux user and home dir exist before spawning as them
     ensureLinuxUser(tenantId);
 
-    // Spawn a dedicated onboarding process as the tenant's Linux user
-    // sudo -n -u ua_<tenantId> ensures the WA session is written into their locked home dir
+    // Spawn a dedicated onboarding process as the tenant's Linux user.
+    // env vars are passed explicitly via `env KEY=VAL` after sudo since sudo
+    // strips environment variables by default (env_reset in sudoers).
     const tenantUser = tenantLinuxUser(tenantId);
     const tenantHomeDir = tenantHome(tenantId);
+    const chromiumPath = process.env.CHROMIUM_PATH || '/usr/bin/google-chrome';
     const proc = spawn('sudo', [
         '-n', '-u', tenantUser,
+        'env',
+        `MONGO_URL=${MONGO_URL}`,
+        `TENANT_ID=${tenantId}`,
+        `WA_DATA_PATH=${tenantHomeDir}`,
+        `HOME=${tenantHomeDir}`,
+        `WA_ONBOARD_MODE=1`,
+        `CHROMIUM_PATH=${chromiumPath}`,
         'node', path.join(UASSIST_ROOT, 'whatsapp-integration/index.js'),
     ], {
-        env: {
-            ...process.env,
-            MONGO_URL,
-            TENANT_ID: tenantId,
-            WA_DATA_PATH: tenantHomeDir,  // sessions → /home/ua_<tid>/wa-session/
-            HOME: tenantHomeDir,
-            WA_ONBOARD_MODE: '1',
-        },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -133,12 +134,10 @@ router.post('/signal', async (req, res, next) => {
 
     const proc = spawn('sudo', [
         '-n', '-u', tenantUser,
+        'env',
+        `HOME=${tenantHomeDir}`,
         SIGNAL_CLI_PATH, 'link', '-n', `UAssist-${tenantId}`,
     ], {
-        env: {
-            ...process.env,
-            HOME: tenantHomeDir,  // signal-cli reads/writes $HOME/.local/share/signal-cli
-        },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
 

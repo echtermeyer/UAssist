@@ -141,22 +141,6 @@ async function provisionTenant(tenantId, { emailAddress, signalPhone, slackBotTo
         }
     }
 
-    // Slack process — tokens are read from MongoDB by the process itself
-    if (slackBotToken) {
-        const slackName = `slack_${tenantId}`;
-        if (!config.apps.find(a => a.name === slackName)) {
-            newApps.push({
-                name: slackName,
-                script: `${UASSIST_ROOT}/slack-integration/index.js`,
-                cwd: `${UASSIST_ROOT}/slack-integration`,
-                env: {
-                    MONGO_URL,
-                    TENANT_ID: tenantId,
-                },
-            });
-        }
-    }
-
     if (newApps.length === 0) return { started: [] };
 
     config.apps.push(...newApps);
