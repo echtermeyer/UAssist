@@ -46,13 +46,14 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
       ...options.headers,
     },
   })
-  if (res.status === 401) {
-    clearToken()
-    throw new Error("UNAUTHORIZED")
-  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error((body as { error?: string }).error || `HTTP ${res.status}`)
+    const message = (body as { error?: string }).error || `HTTP ${res.status}`
+    if (res.status === 401 && message !== "Invalid credentials" && message !== "Username already taken") {
+      clearToken()
+      throw new Error("UNAUTHORIZED")
+    }
+    throw new Error(message)
   }
   return res.json()
 }

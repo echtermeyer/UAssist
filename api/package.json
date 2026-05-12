@@ -2,6 +2,9 @@
   "name": "api",
   "version": "1.0.0",
   "main": "index.js",
+  "scripts": {
+    "test": "API_URL=http://46.225.227.83:3000 node --test test/integration.test.js"
+  },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "dotenv": "^17.4.2",
