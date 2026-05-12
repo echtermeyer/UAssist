@@ -243,24 +243,28 @@ function QRCard({
       if (id === "whatsapp") {
         await startWhatsAppOnboard()
         pollRef.current = setInterval(async () => {
-          const s = await pollWhatsAppStatus()
-          if (s.qr) setQrData(s.qr)
-          if (s.status === "connected") {
-            stopPolling()
-            setStatus("connected")
-            onConnect()
-          }
+          try {
+            const s = await pollWhatsAppStatus()
+            if (s.qr) setQrData(s.qr)
+            if (s.status === "connected") {
+              stopPolling()
+              setStatus("connected")
+              onConnect()
+            }
+          } catch { /* network blip — keep polling */ }
         }, 2000)
       } else {
         await startSignalOnboard()
         pollRef.current = setInterval(async () => {
-          const s = await pollSignalStatus()
-          if (s.linkUri) setQrData(s.linkUri)
-          if (s.status === "linked") {
-            stopPolling()
-            setStatus("linked")
-            onConnect()
-          }
+          try {
+            const s = await pollSignalStatus()
+            if (s.linkUri) setQrData(s.linkUri)
+            if (s.status === "linked") {
+              stopPolling()
+              setStatus("linked")
+              onConnect()
+            }
+          } catch { /* network blip — keep polling */ }
         }, 2000)
       }
     } catch {
