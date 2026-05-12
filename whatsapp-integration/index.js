@@ -18,7 +18,7 @@ async function initDb() {
     collection = db.collection('whatsapp');
     outbox = db.collection('whatsapp_outbox');
     await outbox.createIndex({ _createdAt: 1 }, { expireAfterSeconds: 604800 });
-    console.log('✅ MongoDB ready!');
+    process.stderr.write('MongoDB ready\n');
 }
 
 // Each tenant gets its own session directory and clientId
@@ -50,9 +50,9 @@ client.on('qr', async qr => {
 });
 
 client.on('ready', async () => {
-    console.log('✅ Connected!');
+    process.stderr.write('WhatsApp client ready\n');
     if (ONBOARD_MODE) {
-        // Signal to the API that auth is complete
+        // Signal to the API that auth is complete — stdout only, no other output mixed in
         process.stdout.write(`READY:${TENANT_ID}\n`);
         // In onboard mode, stay alive briefly then exit — persistent process takes over
         setTimeout(() => process.exit(0), 2000);
@@ -76,7 +76,7 @@ client.on('ready', async () => {
 
 client.on('message', async msg => {
     const chat = await msg.getChat();
-    console.log(`[${chat.name}] ${msg.body}`);
+    process.stderr.write(`[${chat.name}] ${msg.body}\n`);
     if (ONBOARD_MODE) return;
     try {
         await collection.insertOne({ ...msg, _chat: chat.name, tenantId: TENANT_ID, _savedAt: new Date() });

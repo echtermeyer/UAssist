@@ -58,38 +58,59 @@ router.post('/whatsapp', async (req, res, next) => {
 
     activeSessions.set(`wa_${tenantId}`, { proc });
 
-    // Buffer stdout to handle large QR base64 strings split across multiple chunks
+    // Buffer stdout to handle large QR base64 strings split across multiple chunks.
+    // The handler is kept synchronous for buffer manipulation; DB writes are fire-and-forget
+    // via a separate async helper so concurrent data events don't corrupt the shared buffer.
     let stdoutBuf = '';
-    proc.stdout.on('data', async chunk => {
-        stdoutBuf += chunk.toString();
-        const lines = stdoutBuf.split('\n');
-        stdoutBuf = lines.pop(); // keep incomplete last line in buffer
-        for (const line of lines) {
-            if (line.startsWith('QR:')) {
-                const qrData = line.slice(3).trim();
-                if (qrData) {
-                    await db.collection('onboarding').updateOne(
-                        { tenantId, service: 'whatsapp' },
-                        { $set: { qr: qrData, _updatedAt: new Date() } }
-                    );
-                }
-            } else if (line.startsWith('READY:')) {
+    let readyHandled = false;
+
+    async function handleLine(line) {
+        if (line.startsWith('QR:')) {
+            const qrData = line.slice(3).trim();
+            if (qrData) {
                 await db.collection('onboarding').updateOne(
                     { tenantId, service: 'whatsapp' },
-                    { $set: { status: 'connected', qr: null, _updatedAt: new Date() } }
+                    { $set: { qr: qrData, _updatedAt: new Date() } }
                 );
-                await db.collection('users').updateOne(
-                    { username: req.user.username },
-                    { $set: { 'onboarding.whatsapp': 'connected' } }
-                );
-                activeSessions.delete(`wa_${tenantId}`);
-                // Provision the persistent process
-                provisionTenant(tenantId).catch(console.error);
             }
+        } else if (line.startsWith('READY:') && !readyHandled) {
+            readyHandled = true;
+            await db.collection('onboarding').updateOne(
+                { tenantId, service: 'whatsapp' },
+                { $set: { status: 'connected', qr: null, _updatedAt: new Date() } }
+            );
+            await db.collection('users').updateOne(
+                { username: req.user.username },
+                { $set: { 'onboarding.whatsapp': 'connected' } }
+            );
+            activeSessions.delete(`wa_${tenantId}`);
+            // Provision the persistent process
+            provisionTenant(tenantId).catch(console.error);
         }
+    }
+
+    function processBuffer(flush) {
+        const lines = stdoutBuf.split('\n');
+        if (flush) {
+            // Process every line including the last (possibly incomplete) chunk
+            stdoutBuf = '';
+        } else {
+            // Keep the last incomplete segment in the buffer
+            stdoutBuf = lines.pop() || '';
+        }
+        for (const line of lines) {
+            if (line.trim()) handleLine(line).catch(console.error);
+        }
+    }
+
+    proc.stdout.on('data', chunk => {
+        stdoutBuf += chunk.toString();
+        processBuffer(false);
     });
 
-    proc.on('close', async () => {
+    proc.on('close', () => {
+        // Flush any remaining buffered output (e.g. READY: without a trailing newline)
+        processBuffer(true);
         activeSessions.delete(`wa_${tenantId}`);
     });
 
