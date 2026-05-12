@@ -88,7 +88,7 @@ SIGNAL_PHONE=+YOURPHONENUMBER
 ---
 
 ### api
-Express REST API on port 3000. Provides endpoints to read messages from all channels and send outbound messages.
+Express REST API on port 3000. JWT-authenticated. All message data is scoped to the requesting user's `tenantId`.
 
 **Env vars:**
 ```
@@ -96,9 +96,30 @@ MONGO_URL=mongodb://localhost:27017/uassist
 SMTP_USER=your@email.com
 SMTP_PASS=yourpassword
 SIGNAL_PHONE=+YOURPHONENUMBER   # optional, required for Signal sending
+JWT_SECRET=your-secret-here     # required in production
+ADMIN_PASS=changeme             # initial admin password (only used if no users exist)
 ```
 
+#### Authentication
+
+```
+POST /auth/login
+Body: { "username": "alice", "password": "secret" }
+→ { "token": "<jwt>", "tenantId": "acme", "role": "user" }
+```
+
+All other endpoints require `Authorization: Bearer <token>`.
+
+```
+POST /auth/register              # admin only
+Body: { "username": "bob", "password": "secret", "tenantId": "acme", "role": "user" }
+```
+
+On first startup, an `admin` user is seeded automatically using `ADMIN_PASS`.
+
 #### Endpoints
+
+All endpoints return only data belonging to the authenticated user's `tenantId`. Admin users see all tenants.
 
 **Read messages**
 ```
@@ -130,7 +151,30 @@ Sends immediately via SMTP. Returns `200` on success.
 
 ---
 
-## VM Setup
+## Multi-Tenancy
+
+Each user has a `tenantId`. Every message saved by an integration process is stamped with the `TENANT_ID` env var from its pm2 config. The API filters all queries by the authenticated user's `tenantId`, so users only ever see their own data. Admin users can see across all tenants.
+
+**To add a second tenant:**
+
+1. Add their pm2 processes to `ecosystem.config.js` on the VM with a new `TENANT_ID`:
+```javascript
+{ name: 'uassist_corp', script: '.../whatsapp-integration/index.js', env: { TENANT_ID: 'corp', ... } },
+{ name: 'signal_corp',  script: '.../signal-integration/index.js',   env: { TENANT_ID: 'corp', ... } },
+{ name: 'email_corp',   script: '.../email-integration/index.js',    env: { TENANT_ID: 'corp', ... } },
+```
+
+2. Register a user for that tenant via the API:
+```bash
+curl -X POST http://<VM>:3000/auth/register \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","password":"secret","tenantId":"corp"}'
+```
+
+3. Start the new processes: `pm2 start ecosystem.config.js --only uassist_corp`
+
+---
 
 The VM runs Ubuntu. One-time setup is handled by `setup-vm.sh`:
 

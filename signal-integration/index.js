@@ -91,6 +91,7 @@ async function run() {
                         fromName,
                         message: msg.message,
                         timestamp: msg.timestamp,
+                        tenantId: process.env.TENANT_ID || 'default',
                         _savedAt: new Date(),
                     }).catch(err => console.error('Failed to save:', err.message));
                 });
