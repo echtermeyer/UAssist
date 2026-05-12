@@ -4,6 +4,32 @@ const { hashPassword, verifyPassword, signToken } = require('../lib/auth');
 
 const router = Router();
 
+// POST /auth/signup — public self-service registration
+router.post('/signup', async (req, res, next) => {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'username and password required' });
+    if (password.length < 6) return res.status(400).json({ error: 'password must be at least 6 characters' });
+    try {
+        const existing = await getDb().collection('users').findOne({ username });
+        if (existing) return res.status(409).json({ error: 'Username already taken' });
+        const passwordHash = await hashPassword(password);
+        // tenantId derived from username — slugified and unique
+        const tenantId = username.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const result = await getDb().collection('users').insertOne({
+            username,
+            passwordHash,
+            tenantId,
+            role: 'user',
+            onboarding: { whatsapp: 'pending', signal: 'pending', email: 'pending' },
+            _createdAt: new Date(),
+        });
+        const token = signToken({ userId: result.insertedId, username, tenantId, role: 'user' });
+        res.status(201).json({ token, tenantId, role: 'user' });
+    } catch (err) {
+        next(err);
+    }
+});
+
 // POST /auth/login
 router.post('/login', async (req, res, next) => {
     const { username, password } = req.body;

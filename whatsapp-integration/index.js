@@ -1,7 +1,12 @@
 require('dotenv').config();
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const qrcode = require('qrcode');
 const { MongoClient } = require('mongodb');
+const path = require('path');
+
+const TENANT_ID = process.env.TENANT_ID || 'default';
+const WA_DATA_PATH = process.env.WA_DATA_PATH || path.join(__dirname, '.wwebjs_auth');
+const ONBOARD_MODE = process.env.WA_ONBOARD_MODE === '1';
 
 const mongo = new MongoClient(process.env.MONGO_URL || 'mongodb://localhost:27017/uassist');
 let collection;
@@ -16,20 +21,44 @@ async function initDb() {
     console.log('✅ MongoDB ready!');
 }
 
+// Each tenant gets its own session directory and clientId
 const client = new Client({
-    authStrategy: new LocalAuth(),
+    authStrategy: new LocalAuth({
+        clientId: TENANT_ID,
+        dataPath: WA_DATA_PATH,
+    }),
     puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
 });
 
-client.on('qr', qr => qrcode.generate(qr, { small: true }));
+client.on('qr', async qr => {
+    if (ONBOARD_MODE) {
+        // Emit QR as base64 PNG to stdout for the API to pick up
+        try {
+            const dataUrl = await qrcode.toDataURL(qr);
+            process.stdout.write(`QR:${dataUrl}\n`);
+        } catch {
+            process.stdout.write(`QR:${qr}\n`);
+        }
+    } else {
+        // Fallback for terminal use
+        const qrcodeTerminal = require('qrcode-terminal');
+        qrcodeTerminal.generate(qr, { small: true });
+    }
+});
 
 client.on('ready', async () => {
     console.log('✅ Connected!');
+    if (ONBOARD_MODE) {
+        // Signal to the API that auth is complete
+        process.stdout.write(`READY:${TENANT_ID}\n`);
+        // In onboard mode, stay alive briefly then exit — persistent process takes over
+        setTimeout(() => process.exit(0), 2000);
+        return;
+    }
     await initDb();
 
-    // Poll outbox for pending messages to send
     setInterval(async () => {
-        const tenantFilter = process.env.TENANT_ID ? { status: 'pending', tenantId: process.env.TENANT_ID } : { status: 'pending' };
+        const tenantFilter = { status: 'pending', tenantId: TENANT_ID };
         const pending = await outbox.find(tenantFilter).toArray();
         for (const job of pending) {
             try {
@@ -45,8 +74,9 @@ client.on('ready', async () => {
 client.on('message', async msg => {
     const chat = await msg.getChat();
     console.log(`[${chat.name}] ${msg.body}`);
+    if (ONBOARD_MODE) return;
     try {
-        await collection.insertOne({ ...msg, _chat: chat.name, tenantId: process.env.TENANT_ID || 'default', _savedAt: new Date() });
+        await collection.insertOne({ ...msg, _chat: chat.name, tenantId: TENANT_ID, _savedAt: new Date() });
     } catch (err) {
         console.error('Failed to save message:', err.message);
     }

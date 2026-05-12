@@ -5,6 +5,8 @@ const { verifyToken } = require('./lib/auth');
 const authRouter = require('./routes/auth');
 const messagesRouter = require('./routes/messages');
 const sendRouter = require('./routes/send');
+const onboardRouter = require('./routes/onboard');
+const streamRouter = require('./routes/stream');
 
 const app = express();
 app.use(express.json());
@@ -40,6 +42,8 @@ function authenticate(req, res, next) {
 app.use('/auth', authRouter);
 app.use('/messages', authenticate, messagesRouter);
 app.use('/send', authenticate, sendRouter);
+app.use('/onboard', authenticate, onboardRouter);
+app.use('/stream', authenticate, streamRouter);
 
 // /auth/register also needs the token (admin check is inside the route)
 app.use((err, req, res, next) => {

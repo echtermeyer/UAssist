@@ -13,26 +13,43 @@ const IMAP_HOSTS = {
     'yahoo.com': 'imap.mail.yahoo.com',
 };
 
-const EMAIL = process.env.EMAIL;
-const PASSWORD = process.env.PASSWORD;
-
-if (!EMAIL || !PASSWORD) {
-    console.error('EMAIL and PASSWORD env vars required');
-    process.exit(1);
-}
-
 function resolveHost(email) {
     const domain = email.split('@')[1]?.toLowerCase();
     return IMAP_HOSTS[domain] ?? `imap.${domain}`;
 }
 
+async function getCredentials(db) {
+    const TENANT_ID = process.env.TENANT_ID;
+    // Prefer DB-stored credentials (set during onboarding)
+    if (TENANT_ID) {
+        const user = await db.collection('users').findOne({ tenantId: TENANT_ID });
+        if (user?.emailAddress && user?.emailPassword) {
+            return { email: user.emailAddress, password: user.emailPassword };
+        }
+    }
+    // Fallback: env vars (legacy / default tenant)
+    const email = process.env.EMAIL;
+    const password = process.env.PASSWORD;
+    if (!email || !password) return null;
+    return { email, password };
+}
+
 async function run() {
     const mongo = new MongoClient(process.env.MONGO_URL || 'mongodb://localhost:27017/uassist');
     await mongo.connect();
-    const collection = mongo.db().collection('email');
+    const db = mongo.db();
+    const collection = db.collection('email');
     console.log('✅ MongoDB ready!');
 
+    const creds = await getCredentials(db);
+    if (!creds) {
+        console.error('No email credentials found. Set EMAIL/PASSWORD env vars or complete onboarding.');
+        process.exit(1);
+    }
+
+    const { email: EMAIL, password: PASSWORD } = creds;
     const host = resolveHost(EMAIL);
+
     const client = new ImapFlow({
         host,
         port: 993,
