@@ -3,6 +3,22 @@
 import { useState } from "react"
 import { Mail, MessageCircle, ShieldCheck, Check, ChevronDown, Eye, EyeOff, Link2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getToken } from "@/lib/api"
+
+const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
+
+async function apiFetch(path: string, body: unknown) {
+  const token = getToken()
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  })
+  return res.json()
+}
 
 // ── QR mock ────────────────────────────────────────────────────────────────
 const QR_SIZE = 17
@@ -24,7 +40,6 @@ function buildQRCells(): boolean[] {
       if (tl !== null) { cells.push(tl); continue }
       if (tr !== null) { cells.push(tr); continue }
       if (bl !== null) { cells.push(bl); continue }
-      // separator columns/rows
       if (c === 7 || (r === 7 && c <= 9) || (r === 9 && c <= 7)) { cells.push(false); continue }
       seed = ((seed * 1664525) + 1013904223) | 0
       cells.push((seed >>> 0) % 2 === 0)
@@ -106,8 +121,25 @@ function IntegrationCard({
   const [emailVal, setEmailVal] = useState("")
   const [passwordVal, setPasswordVal] = useState("")
   const [showPw, setShowPw] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
   const { name, description, Icon, iconBg, iconColor, kind } = integration
+
+  async function handleEmailConnect() {
+    if (!emailVal || !passwordVal) return
+    setLoading(true)
+    setError("")
+    try {
+      const data = await apiFetch("/onboard/email", { email: emailVal, password: passwordVal })
+      if (data.error) { setError(data.error); return }
+      onConnect()
+    } catch {
+      setError("Connection failed. Check credentials and try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div
@@ -178,12 +210,13 @@ function IntegrationCard({
                 </div>
                 <p className="text-[11px] text-zinc-400">Use an app-specific password if 2FA is enabled</p>
               </div>
+              {error && <p className="text-xs text-rose-600">{error}</p>}
               <button
-                onClick={() => { if (emailVal && passwordVal) onConnect() }}
-                disabled={!emailVal || !passwordVal}
+                onClick={handleEmailConnect}
+                disabled={!emailVal || !passwordVal || loading}
                 className="mt-1 w-full py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Connect
+                {loading ? "Connecting…" : "Connect"}
               </button>
             </div>
           ) : (
@@ -203,10 +236,12 @@ function IntegrationCard({
                     </li>
                   ))}
                 </ol>
-                <div className="mt-4 flex items-center gap-1.5 text-[11px] text-zinc-400">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block" />
-                  Waiting for scan…
-                </div>
+                <button
+                  onClick={onConnect}
+                  className="mt-4 text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-600 transition-colors"
+                >
+                  Already connected? Mark as done
+                </button>
               </div>
             </div>
           )}

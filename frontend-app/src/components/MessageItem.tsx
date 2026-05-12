@@ -1,4 +1,4 @@
-import { Mail, MessageCircle } from "lucide-react"
+import { Mail, MessageCircle, ShieldCheck } from "lucide-react"
 import { cn, formatRelativeTime, getAvatarColors } from "@/lib/utils"
 import type { Message } from "@/lib/mock-data"
 
@@ -46,6 +46,8 @@ export function MessageItem({ message, selected, onSelect }: Props) {
           <div className="flex items-center gap-1.5 shrink-0">
             {message.type === "email" ? (
               <Mail className="h-3 w-3 text-zinc-400" />
+            ) : message.type === "signal" ? (
+              <ShieldCheck className="h-3 w-3 text-indigo-400" />
             ) : (
               <MessageCircle className="h-3 w-3 text-emerald-500" />
             )}

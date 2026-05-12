@@ -1,13 +1,15 @@
 import { Inbox } from "lucide-react"
 import { EmailDetail } from "./EmailDetail"
 import { WhatsAppDetail } from "./WhatsAppDetail"
+import { SignalDetail } from "./SignalDetail"
 import type { Message } from "@/lib/mock-data"
 
 interface Props {
   message: Message | null
+  onRefresh: () => void
 }
 
-export function DetailView({ message }: Props) {
+export function DetailView({ message, onRefresh }: Props) {
   if (!message) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3">
@@ -19,6 +21,7 @@ export function DetailView({ message }: Props) {
     )
   }
 
-  if (message.type === "email") return <EmailDetail message={message} />
-  return <WhatsAppDetail message={message} />
+  if (message.type === "email") return <EmailDetail message={message} onRefresh={onRefresh} />
+  if (message.type === "signal") return <SignalDetail message={message} />
+  return <WhatsAppDetail message={message} onRefresh={onRefresh} />
 }

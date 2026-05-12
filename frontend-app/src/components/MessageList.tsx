@@ -3,11 +3,12 @@ import type { Message } from "@/lib/mock-data"
 
 interface Props {
   messages: Message[]
+  loading: boolean
   selectedId: string | null
   onSelect: (message: Message) => void
 }
 
-export function MessageList({ messages, selectedId, onSelect }: Props) {
+export function MessageList({ messages, loading, selectedId, onSelect }: Props) {
   const unreadCount = messages.filter((m) => !m.read).length
 
   return (
@@ -23,14 +24,24 @@ export function MessageList({ messages, selectedId, onSelect }: Props) {
         )}
       </div>
       <div className="flex-1 overflow-y-auto">
-        {messages.map((message) => (
-          <MessageItem
-            key={message.id}
-            message={message}
-            selected={message.id === selectedId}
-            onSelect={() => onSelect(message)}
-          />
-        ))}
+        {loading ? (
+          <div className="flex items-center justify-center h-24">
+            <span className="text-xs text-zinc-400">Loading…</span>
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="flex items-center justify-center h-24">
+            <span className="text-xs text-zinc-400">No messages yet</span>
+          </div>
+        ) : (
+          messages.map((message) => (
+            <MessageItem
+              key={message.id}
+              message={message}
+              selected={message.id === selectedId}
+              onSelect={() => onSelect(message)}
+            />
+          ))
+        )}
       </div>
     </div>
   )

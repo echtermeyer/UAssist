@@ -1,25 +1,40 @@
+"use client"
+
+import { useState } from "react"
 import { Send, Reply } from "lucide-react"
 import { cn, getAvatarColors } from "@/lib/utils"
+import { sendEmail } from "@/lib/api"
 import type { EmailMessage } from "@/lib/mock-data"
 
 interface Props {
   message: EmailMessage
+  onRefresh: () => void
 }
 
-export function EmailDetail({ message }: Props) {
+export function EmailDetail({ message, onRefresh }: Props) {
   const { bg, text } = getAvatarColors(message.initials)
+  const [reply, setReply] = useState("")
+  const [sending, setSending] = useState(false)
+
+  async function handleSend() {
+    if (!reply.trim()) return
+    setSending(true)
+    try {
+      await sendEmail(message.address, `Re: ${message.subject}`, reply)
+      setReply("")
+      onRefresh()
+    } catch {
+      // keep input so user can retry
+    } finally {
+      setSending(false)
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
       <div className="px-6 pt-5 pb-4 border-b border-zinc-100">
         <div className="flex items-start gap-3">
-          <div
-            className={cn(
-              "h-9 w-9 rounded-full shrink-0 flex items-center justify-center text-xs font-bold",
-              bg,
-              text
-            )}
-          >
+          <div className={cn("h-9 w-9 rounded-full shrink-0 flex items-center justify-center text-xs font-bold", bg, text)}>
             {message.initials}
           </div>
           <div className="flex-1 min-w-0">
@@ -48,10 +63,17 @@ export function EmailDetail({ message }: Props) {
         <div className="flex items-center gap-2 border border-zinc-200 rounded-xl px-3 py-2 bg-zinc-50 focus-within:bg-white focus-within:border-zinc-300 transition-all">
           <Reply className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
           <input
+            value={reply}
+            onChange={(e) => setReply(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
             placeholder="Reply…"
             className="flex-1 bg-transparent text-sm text-zinc-800 placeholder:text-zinc-400 focus:outline-none"
           />
-          <button className="h-6 w-6 rounded-md bg-emerald-600 flex items-center justify-center hover:bg-emerald-700 transition-colors shrink-0">
+          <button
+            onClick={handleSend}
+            disabled={!reply.trim() || sending}
+            className="h-6 w-6 rounded-md bg-emerald-600 flex items-center justify-center hover:bg-emerald-700 transition-colors shrink-0 disabled:opacity-40"
+          >
             <Send className="h-3 w-3 text-white" />
           </button>
         </div>
