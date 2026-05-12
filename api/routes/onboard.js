@@ -2,7 +2,7 @@ const { Router } = require('express');
 const { spawn, execFile } = require('child_process');
 const path = require('path');
 const { getDb } = require('../lib/db');
-const { provisionTenant, tenantLinuxUser, tenantHome } = require('../lib/pm2');
+const { provisionTenant, tenantLinuxUser, tenantHome, ensureLinuxUser } = require('../lib/pm2');
 
 const router = Router();
 
@@ -32,6 +32,9 @@ router.post('/whatsapp', async (req, res, next) => {
         { $set: { tenantId, service: 'whatsapp', status: 'pending', qr: null, _updatedAt: new Date() } },
         { upsert: true }
     );
+
+    // Ensure the tenant's Linux user and home dir exist before spawning as them
+    ensureLinuxUser(tenantId);
 
     // Spawn a dedicated onboarding process as the tenant's Linux user
     // sudo -n -u ua_<tenantId> ensures the WA session is written into their locked home dir
@@ -124,6 +127,10 @@ router.post('/signal', async (req, res, next) => {
 
     const tenantUser = tenantLinuxUser(tenantId);
     const tenantHomeDir = tenantHome(tenantId);
+
+    // Ensure the tenant's Linux user and home dir exist before spawning as them
+    ensureLinuxUser(tenantId);
+
     const proc = spawn('sudo', [
         '-n', '-u', tenantUser,
         SIGNAL_CLI_PATH, 'link', '-n', `UAssist-${tenantId}`,

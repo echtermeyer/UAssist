@@ -171,4 +171,4 @@ async function provisionTenant(tenantId, { emailAddress, signalPhone, slackBotTo
     return { started };
 }
 
-module.exports = { provisionTenant, tenantLinuxUser, tenantHome };
+module.exports = { provisionTenant, tenantLinuxUser, tenantHome, ensureLinuxUser };
