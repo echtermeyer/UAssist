@@ -5,12 +5,14 @@ import { messages, type Message } from "@/lib/mock-data"
 import { Header } from "@/components/Header"
 import { MessageList } from "@/components/MessageList"
 import { DetailView } from "@/components/DetailView"
+import { IntegrationsPanel } from "@/components/IntegrationsPanel"
 
 export default function Page() {
   const [selected, setSelected] = useState<Message | null>(null)
 
   return (
     <div className="flex h-screen bg-zinc-50">
+      {/* Left 50% — messaging */}
       <div className="w-1/2 flex flex-col border-r border-zinc-200 overflow-hidden">
         <Header />
         <div className="flex flex-1 overflow-hidden">
@@ -21,6 +23,11 @@ export default function Page() {
             <DetailView message={selected} />
           </div>
         </div>
+      </div>
+
+      {/* Right 50% — integrations */}
+      <div className="w-1/2 flex flex-col overflow-hidden">
+        <IntegrationsPanel />
       </div>
     </div>
   )
