@@ -21,4 +21,4 @@ jobs:
             cd /home/deploy/UAssist/whatsapp-integration
             git pull origin main
             npm install --production
-            pm2 reload uassist || pm2 start index.js --name uassist
+            pm2 reload uassist || pm2 start index.js --name uassist --env-file .env
