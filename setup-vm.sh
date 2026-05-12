@@ -2,31 +2,37 @@
 # Run this once on the VM as root: bash setup-vm.sh
 set -e
 
-DB_NAME="uassist"
-DB_USER="uassist"
-DB_PASSWORD=$(openssl rand -base64 24)
+MONGO_USER="uassist"
+MONGO_PASSWORD=$(openssl rand -base64 24)
 
-echo "==> Installing PostgreSQL..."
+echo "==> Installing MongoDB..."
 apt-get update -y
-apt-get install -y postgresql postgresql-contrib
+apt-get install -y gnupg curl
+curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | gpg -o /usr/share/keyrings/mongodb-server-8.0.gpg --dearmor
+echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+apt-get update -y
+apt-get install -y mongodb-org
+systemctl enable mongod
+systemctl start mongod
 
-echo "==> Creating database and user..."
-sudo -u postgres psql <<EOF
-CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';
-CREATE DATABASE $DB_NAME OWNER $DB_USER;
-GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
-EOF
+echo "==> Creating MongoDB user..."
+mongosh uassist --eval "
+  db.createUser({
+    user: '$MONGO_USER',
+    pwd: '$MONGO_PASSWORD',
+    roles: [{ role: 'readWrite', db: 'uassist' }]
+  })
+"
 
-echo "==> Writing .env for the app..."
-cat > /home/deploy/UAssist/whatsapp-integration/.env <<EOF
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=$DB_NAME
-DB_USER=$DB_USER
-DB_PASSWORD=$DB_PASSWORD
+echo "==> Writing .env files..."
+for dir in whatsapp-integration email-integration; do
+    env_file="/root/UAssist/$dir/.env"
+    cat > "$env_file" <<EOF
+MONGO_URL=mongodb://$MONGO_USER:$MONGO_PASSWORD@localhost:27017/uassist
 EOF
-chown deploy:deploy /home/deploy/UAssist/whatsapp-integration/.env
-chmod 600 /home/deploy/UAssist/whatsapp-integration/.env
+    chmod 600 "$env_file"
+done
+
 
 echo "==> Installing noVNC + XFCE desktop..."
 apt-get install -y xfce4 xfce4-goodies tightvncserver novnc websockify
@@ -84,10 +90,10 @@ echo ""
 echo "======================================"
 echo "Setup complete!"
 echo ""
-echo "PostgreSQL credentials (saved to .env):"
-echo "  DB_NAME: $DB_NAME"
-echo "  DB_USER: $DB_USER"
-echo "  DB_PASSWORD: $DB_PASSWORD"
+echo "MongoDB credentials (saved to .env files):"
+echo "  User: $MONGO_USER"
+echo "  Password: $MONGO_PASSWORD"
+echo "  URL: mongodb://$MONGO_USER:$MONGO_PASSWORD@localhost:27017/uassist"
 echo ""
 echo "noVNC Desktop: http://<VM_IP>:6080/vnc.html"
 echo "VNC password: changeme  <-- change this with: vncpasswd (as deploy user)"

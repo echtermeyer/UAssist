@@ -1,4 +1,6 @@
+require('dotenv').config();
 const { ImapFlow } = require('imapflow');
+const { MongoClient } = require('mongodb');
 
 const IMAP_HOSTS = {
     'gmail.com': 'imap.gmail.com',
@@ -24,12 +26,12 @@ function resolveHost(email) {
     return IMAP_HOSTS[domain] ?? `imap.${domain}`;
 }
 
-async function fetchMessage(client, seq) {
-    const msg = await client.fetchOne(seq, { envelope: true, bodyStructure: true });
-    return msg?.envelope;
-}
-
 async function run() {
+    const mongo = new MongoClient(process.env.MONGO_URL || 'mongodb://localhost:27017/uassist');
+    await mongo.connect();
+    const collection = mongo.db().collection('email');
+    console.log('✅ MongoDB ready!');
+
     const host = resolveHost(EMAIL);
     const client = new ImapFlow({
         host,
@@ -45,16 +47,25 @@ async function run() {
     const lock = await client.getMailboxLock('INBOX');
 
     client.on('exists', async data => {
-        const seq = data.count;
-        const envelope = await fetchMessage(client, seq);
-        if (!envelope) return;
-        console.log(`📧 New email`);
-        console.log(`   From:    ${envelope.from?.[0]?.address}`);
-        console.log(`   Subject: ${envelope.subject}`);
-        console.log(`   Date:    ${envelope.date}`);
+        const msg = await client.fetchOne(data.count, { envelope: true, bodyStructure: true });
+        if (!msg) return;
+        console.log(`📧 [${msg.envelope?.from?.[0]?.address}] ${msg.envelope?.subject}`);
+        console.log('msg keys:', Object.keys(msg));
+        console.log('msg JSON:', JSON.stringify(msg));
+        try {
+            const doc = JSON.parse(JSON.stringify({ ...msg, _account: EMAIL, _savedAt: new Date() }));
+            console.log('inserting doc:', JSON.stringify(doc));
+            const result = await collection.insertOne(doc);
+            console.log('inserted:', result.insertedId);
+        } catch (err) {
+            console.error('Failed to save message:', err);
+        }
     });
 
-    await client.idle();
+    while (client.usable) {
+        await client.idle();
+    }
+
     lock.release();
     await client.logout();
 }
