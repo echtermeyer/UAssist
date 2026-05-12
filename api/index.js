@@ -9,6 +9,19 @@ const sendRouter = require('./routes/send');
 const app = express();
 app.use(express.json());
 
+// CORS — allow the frontend origin
+app.use((req, res, next) => {
+    const allowed = (process.env.CORS_ORIGIN || '*').split(',').map(s => s.trim());
+    const origin = req.headers.origin || '';
+    if (allowed.includes('*') || allowed.includes(origin)) {
+        res.set('Access-Control-Allow-Origin', allowed.includes('*') ? '*' : origin);
+    }
+    res.set('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    next();
+});
+
 // JWT auth middleware — attaches req.user if token is valid
 function authenticate(req, res, next) {
     const header = req.headers.authorization;
