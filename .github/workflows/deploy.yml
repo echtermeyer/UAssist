@@ -18,7 +18,13 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
           script: |
-            cd /home/deploy/UAssist/whatsapp-integration
+            cd /home/deploy/UAssist
             git pull origin main
+
+            cd whatsapp-integration
             npm install --production
             pm2 reload uassist || pm2 start index.js --name uassist --env-file .env
+
+            cd ../email-integration
+            npm install --production
+            pm2 reload email || pm2 start index.js --name email --env-file .env
