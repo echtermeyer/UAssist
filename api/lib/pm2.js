@@ -1,12 +1,49 @@
-const { execFile } = require('child_process');
+const { execFile, execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
 const ECOSYSTEM_PATH = process.env.ECOSYSTEM_PATH || '/home/deploy/ecosystem.config.js';
 const UASSIST_ROOT = process.env.UASSIST_ROOT || '/home/deploy/UAssist';
-const WA_DATA_PATH = process.env.WA_DATA_PATH || '/home/deploy/wa-sessions';
 const MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017/uassist';
 const SIGNAL_CLI_PATH = process.env.SIGNAL_CLI_PATH || 'signal-cli';
+
+// Linux user for a tenant — each gets an isolated home directory
+function tenantLinuxUser(tenantId) {
+    return `ua_${tenantId}`;
+}
+
+// Home directory for a tenant's Linux user
+function tenantHome(tenantId) {
+    return `/home/ua_${tenantId}`;
+}
+
+// Create the Linux user and set up their home directory (idempotent).
+// Requires deploy to have: sudo -n /usr/sbin/useradd, sudo -n /usr/sbin/mkhomedir_helper
+function ensureLinuxUser(tenantId) {
+    const user = tenantLinuxUser(tenantId);
+    const home = tenantHome(tenantId);
+
+    // Check if user already exists
+    try {
+        execSync(`id ${user}`, { stdio: 'ignore' });
+    } catch {
+        // Create system user, no login shell, home dir created by useradd
+        execSync(`sudo -n useradd -m -d ${home} -s /usr/sbin/nologin -U ${user}`, { stdio: 'inherit' });
+    }
+
+    // Ensure home is 700 so no other user can read it
+    execSync(`sudo -n chmod 700 ${home}`, { stdio: 'inherit' });
+    execSync(`sudo -n chown ${user}:${user} ${home}`, { stdio: 'inherit' });
+
+    // Create subdirectories owned by the tenant user
+    for (const subdir of ['wa-session', '.local/share/signal-cli']) {
+        const full = path.join(home, subdir);
+        execSync(`sudo -n mkdir -p ${full}`, { stdio: 'inherit' });
+        execSync(`sudo -n chown -R ${user}:${user} ${full}`, { stdio: 'inherit' });
+    }
+
+    return { user, home };
+}
 
 function pm2(args) {
     return new Promise((resolve, reject) => {
@@ -28,27 +65,30 @@ function writeEcosystem(config) {
     fs.writeFileSync(ECOSYSTEM_PATH, content, 'utf-8');
 }
 
-async function provisionTenant(tenantId, { emailAddress, emailPassword, signalPhone } = {}) {
-    const config = readEcosystem();
+async function provisionTenant(tenantId, { emailAddress, signalPhone } = {}) {
+    // 1. Ensure the OS-level user exists and home dir is locked down
+    const { user, home } = ensureLinuxUser(tenantId);
 
+    const config = readEcosystem();
     const newApps = [];
 
-    // WhatsApp process
+    // WhatsApp process — runs as the tenant's Linux user
     const waName = `uassist_${tenantId}`;
     if (!config.apps.find(a => a.name === waName)) {
         newApps.push({
             name: waName,
             script: `${UASSIST_ROOT}/whatsapp-integration/index.js`,
             cwd: `${UASSIST_ROOT}/whatsapp-integration`,
+            uid: user,
             env: {
                 MONGO_URL,
                 TENANT_ID: tenantId,
-                WA_DATA_PATH,
+                WA_DATA_PATH: home,  // sessions go in /home/ua_<tid>/wa-session/
             },
         });
     }
 
-    // Signal process
+    // Signal process — runs as the tenant's Linux user
     if (signalPhone) {
         const sigName = `signal_${tenantId}`;
         if (!config.apps.find(a => a.name === sigName)) {
@@ -56,17 +96,19 @@ async function provisionTenant(tenantId, { emailAddress, emailPassword, signalPh
                 name: sigName,
                 script: `${UASSIST_ROOT}/signal-integration/index.js`,
                 cwd: `${UASSIST_ROOT}/signal-integration`,
+                uid: user,
                 env: {
                     MONGO_URL,
                     TENANT_ID: tenantId,
                     SIGNAL_CLI_PATH,
                     SIGNAL_PHONE: signalPhone,
+                    HOME: home,   // signal-cli reads/writes to $HOME/.local/share/signal-cli
                 },
             });
         }
     }
 
-    // Email process — credentials are read from MongoDB by the process itself
+    // Email process — runs as the tenant's Linux user; reads creds from MongoDB
     if (emailAddress) {
         const emailName = `email_${tenantId}`;
         if (!config.apps.find(a => a.name === emailName)) {
@@ -74,10 +116,11 @@ async function provisionTenant(tenantId, { emailAddress, emailPassword, signalPh
                 name: emailName,
                 script: `${UASSIST_ROOT}/email-integration/index.js`,
                 cwd: `${UASSIST_ROOT}/email-integration`,
+                uid: user,
                 env: {
                     MONGO_URL,
                     TENANT_ID: tenantId,
-                    // No EMAIL/PASSWORD here — process reads from MongoDB users collection
+                    // No EMAIL/PASSWORD — process reads from MongoDB users collection
                 },
             });
         }
@@ -97,4 +140,4 @@ async function provisionTenant(tenantId, { emailAddress, emailPassword, signalPh
     return { started };
 }
 
-module.exports = { provisionTenant };
+module.exports = { provisionTenant, tenantLinuxUser, tenantHome };

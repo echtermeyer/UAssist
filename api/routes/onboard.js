@@ -2,12 +2,11 @@ const { Router } = require('express');
 const { spawn, execFile } = require('child_process');
 const path = require('path');
 const { getDb } = require('../lib/db');
-const { provisionTenant } = require('../lib/pm2');
+const { provisionTenant, tenantLinuxUser, tenantHome } = require('../lib/pm2');
 
 const router = Router();
 
 const UASSIST_ROOT = process.env.UASSIST_ROOT || '/home/deploy/UAssist';
-const WA_DATA_PATH = process.env.WA_DATA_PATH || '/home/deploy/wa-sessions';
 const SIGNAL_CLI_PATH = process.env.SIGNAL_CLI_PATH || 'signal-cli';
 const MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017/uassist';
 
@@ -34,14 +33,21 @@ router.post('/whatsapp', async (req, res, next) => {
         { upsert: true }
     );
 
-    // Spawn a dedicated onboarding process
-    const proc = spawn('node', [path.join(UASSIST_ROOT, 'whatsapp-integration/index.js')], {
+    // Spawn a dedicated onboarding process as the tenant's Linux user
+    // sudo -n -u ua_<tenantId> ensures the WA session is written into their locked home dir
+    const tenantUser = tenantLinuxUser(tenantId);
+    const tenantHomeDir = tenantHome(tenantId);
+    const proc = spawn('sudo', [
+        '-n', '-u', tenantUser,
+        'node', path.join(UASSIST_ROOT, 'whatsapp-integration/index.js'),
+    ], {
         env: {
             ...process.env,
             MONGO_URL,
             TENANT_ID: tenantId,
-            WA_DATA_PATH,
-            WA_ONBOARD_MODE: '1', // signals the process to emit QR to stdout and exit after auth
+            WA_DATA_PATH: tenantHomeDir,  // sessions → /home/ua_<tid>/wa-session/
+            HOME: tenantHomeDir,
+            WA_ONBOARD_MODE: '1',
         },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -116,7 +122,16 @@ router.post('/signal', async (req, res, next) => {
         { upsert: true }
     );
 
-    const proc = spawn(SIGNAL_CLI_PATH, ['link', '-n', `UAssist-${tenantId}`], {
+    const tenantUser = tenantLinuxUser(tenantId);
+    const tenantHomeDir = tenantHome(tenantId);
+    const proc = spawn('sudo', [
+        '-n', '-u', tenantUser,
+        SIGNAL_CLI_PATH, 'link', '-n', `UAssist-${tenantId}`,
+    ], {
+        env: {
+            ...process.env,
+            HOME: tenantHomeDir,  // signal-cli reads/writes $HOME/.local/share/signal-cli
+        },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -142,11 +157,11 @@ router.post('/signal', async (req, res, next) => {
     proc.on('close', async code => {
         activeSessions.delete(`sig_${tenantId}`);
         if (code === 0) {
-            // Linked successfully — find the new account number
+            // Linked successfully — find the new account number from the tenant's signal-cli data
             let phone = null;
             try {
                 const fs = require('fs');
-                const accountsPath = path.join(process.env.HOME, '.local/share/signal-cli/data/accounts.json');
+                const accountsPath = path.join(tenantHomeDir, '.local/share/signal-cli/data/accounts.json');
                 const data = JSON.parse(fs.readFileSync(accountsPath, 'utf-8'));
                 const accounts = data.accounts || [];
                 phone = accounts[accounts.length - 1]?.number || null;
