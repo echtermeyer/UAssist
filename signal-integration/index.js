@@ -31,7 +31,7 @@ function resolveContactName(contact) {
 async function syncContacts(db) {
     try {
         const output = execFileSync('signal-cli', ['-a', SIGNAL_PHONE, '--output=json', 'listContacts'], {
-            timeout: 15000,
+            timeout: 30000,
         }).toString();
         const contacts = JSON.parse(output);
         const col = db.collection('signal_contacts');
@@ -47,7 +47,7 @@ async function syncContacts(db) {
         console.log(`✅ Synced ${contacts.length} Signal contacts`);
         return col;
     } catch (err) {
-        console.error('Failed to sync contacts:', err.message);
+        console.error('Failed to sync contacts (will retry next restart):', err.message);
         return db.collection('signal_contacts');
     }
 }
@@ -59,6 +59,7 @@ async function run() {
     const collection = db.collection('signal');
     console.log('✅ MongoDB ready!');
 
+    // Sync contacts first (before spawning receive which holds the lock)
     const contactsCol = await syncContacts(db);
 
     const proc = spawn('signal-cli', ['-a', SIGNAL_PHONE, '--output=json', 'receive', '-t', '-1'], {
@@ -80,7 +81,7 @@ async function run() {
                 const from = envelope?.envelope?.source;
                 if (!msg?.message) continue;
 
-                contactsCol.findOne({ number: from }).then(contact => {
+                contactsCol.findOne({ $or: [{ number: from }, { uuid: from }] }).then(contact => {
                     const fromName = contact?.name || from;
                     console.log(`📱 [${fromName}] ${msg.message}`);
                     collection.insertOne({
