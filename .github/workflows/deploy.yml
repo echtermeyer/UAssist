@@ -27,4 +27,4 @@ jobs:
 
             cd ../email-integration
             npm install --production
-            pm2 reload email || pm2 start index.js --name email --env-file .env
+            pm2 reload email || (export $(cat .env | xargs) && pm2 start index.js --name email)
