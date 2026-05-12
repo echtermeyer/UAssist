@@ -23,8 +23,18 @@ jobs:
 
             cd whatsapp-integration
             npm install --production
-            pm2 reload uassist || pm2 start index.js --name uassist --env-file .env
+            pm2 reload uassist || pm2 start /home/deploy/ecosystem.config.js --only uassist
 
             cd ../email-integration
             npm install --production
-            pm2 reload email || (export $(cat .env | xargs) && pm2 start index.js --name email)
+            pm2 reload email || pm2 start /home/deploy/ecosystem.config.js --only email
+
+            cd ../signal-integration
+            npm install --production
+            pm2 reload signal || pm2 start /home/deploy/ecosystem.config.js --only signal
+
+            cd ../api
+            npm install --production
+            pm2 reload api || pm2 start /home/deploy/ecosystem.config.js --only api
+
+            pm2 save

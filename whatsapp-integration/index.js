@@ -5,10 +5,14 @@ const { MongoClient } = require('mongodb');
 
 const mongo = new MongoClient(process.env.MONGO_URL || 'mongodb://localhost:27017/uassist');
 let collection;
+let outbox;
 
 async function initDb() {
     await mongo.connect();
-    collection = mongo.db().collection('whatsapp');
+    const db = mongo.db();
+    collection = db.collection('whatsapp');
+    outbox = db.collection('whatsapp_outbox');
+    await outbox.createIndex({ _createdAt: 1 }, { expireAfterSeconds: 604800 });
     console.log('✅ MongoDB ready!');
 }
 
@@ -22,6 +26,19 @@ client.on('qr', qr => qrcode.generate(qr, { small: true }));
 client.on('ready', async () => {
     console.log('✅ Connected!');
     await initDb();
+
+    // Poll outbox for pending messages to send
+    setInterval(async () => {
+        const pending = await outbox.find({ status: 'pending' }).toArray();
+        for (const job of pending) {
+            try {
+                await client.sendMessage(`${job.to}@c.us`, job.message);
+                await outbox.updateOne({ _id: job._id }, { $set: { status: 'sent' } });
+            } catch (e) {
+                await outbox.updateOne({ _id: job._id }, { $set: { status: 'failed', error: e.message } });
+            }
+        }
+    }, 2000);
 });
 
 client.on('message', async msg => {

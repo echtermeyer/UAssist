@@ -1,0 +1,9 @@
+{
+  "name": "signal-integration",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "mongodb": "^7.2.0"
+  }
+}
