@@ -4,6 +4,8 @@ const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+const SIGNAL_CLI = process.env.SIGNAL_CLI_PATH || 'signal-cli';
+
 function detectSignalAccount() {
     if (process.env.SIGNAL_PHONE) return process.env.SIGNAL_PHONE;
     try {
@@ -20,8 +22,6 @@ if (!SIGNAL_PHONE) {
     console.error('No Signal account found. Link a device first: signal-cli link -n "UAssist VM"');
     process.exit(1);
 }
-
-const SIGNAL_CLI = process.env.SIGNAL_CLI_PATH || 'signal-cli';
 
 function resolveContactName(contact) {
     if (contact.name) return contact.name;
@@ -49,7 +49,7 @@ async function syncContacts(db) {
         console.log(`✅ Synced ${contacts.length} Signal contacts`);
         return col;
     } catch (err) {
-        console.error('Failed to sync contacts (will retry next restart):', err.message);
+        console.error('Failed to sync contacts:', err.message);
         return db.collection('signal_contacts');
     }
 }
@@ -61,7 +61,7 @@ async function run() {
     const collection = db.collection('signal');
     console.log('✅ MongoDB ready!');
 
-    // Sync contacts first (before spawning receive which holds the lock)
+    // Sync contacts before spawning receive (which holds the file lock)
     const contactsCol = await syncContacts(db);
 
     const proc = spawn(SIGNAL_CLI, ['-a', SIGNAL_PHONE, '--output=json', 'receive', '-t', '-1'], {
@@ -94,45 +94,6 @@ async function run() {
                         _savedAt: new Date(),
                     }).catch(err => console.error('Failed to save:', err.message));
                 });
-            } catch (e) {
-                console.error('Parse error:', e.message);
-            }
-        }
-    });
-
-    proc.stderr.on('data', d => console.error('[signal-cli]', d.toString().trim()));
-
-    proc.on('close', code => {
-        console.error(`signal-cli exited with code ${code}, restarting in 5s...`);
-        setTimeout(() => process.exit(1), 5000);
-    });
-}
-
-run().catch(err => {
-    console.error('Fatal:', err.message);
-    process.exit(1);
-});
-
-
-    let buffer = '';
-    proc.stdout.on('data', chunk => {
-        buffer += chunk.toString();
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-        for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-                const envelope = JSON.parse(line);
-                const msg = envelope?.envelope?.dataMessage;
-                const from = envelope?.envelope?.source;
-                if (!msg?.message) continue;
-                console.log(`📱 [${from}] ${msg.message}`);
-                collection.insertOne({
-                    from,
-                    message: msg.message,
-                    timestamp: msg.timestamp,
-                    _savedAt: new Date(),
-                }).catch(err => console.error('Failed to save:', err.message));
             } catch (e) {
                 console.error('Parse error:', e.message);
             }
