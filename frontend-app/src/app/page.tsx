@@ -162,7 +162,7 @@ export default function Page() {
   return (
     <div className="flex h-screen bg-zinc-50">
       <div className="w-1/2 flex flex-col border-r border-zinc-200 overflow-hidden">
-        <Header onLogout={() => { clearToken(); closeStreamRef.current?.(); setAuthed(false) }} />
+        <Header onLogout={() => { clearToken(); localStorage.removeItem("ua_integrations"); closeStreamRef.current?.(); setAuthed(false) }} />
         <div className="flex flex-1 overflow-hidden">
           <div className="w-[42%] flex flex-col border-r border-zinc-100 overflow-hidden bg-zinc-50">
             <MessageList

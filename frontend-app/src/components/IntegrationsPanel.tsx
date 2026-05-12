@@ -4,10 +4,25 @@ import { useState, useEffect, useRef } from "react"
 import { Mail, MessageCircle, ShieldCheck, Check, ChevronDown, Eye, EyeOff, Link2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { startWhatsAppOnboard, pollWhatsAppStatus, startSignalOnboard, pollSignalStatus, connectEmail } from "@/lib/api"
-import Image from "next/image"
 
 type IntegrationId = "email" | "whatsapp" | "signal"
 type OnboardStatus = "idle" | "pending" | "connected" | "linked" | "error"
+
+const STORAGE_KEY = "ua_integrations"
+
+function loadConnected(): Set<IntegrationId> {
+  if (typeof window === "undefined") return new Set()
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    return new Set((raw ? JSON.parse(raw) : []) as IntegrationId[])
+  } catch {
+    return new Set()
+  }
+}
+
+function saveConnected(set: Set<IntegrationId>) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify([...set]))
+}
 
 // ── Email card ─────────────────────────────────────────────────────────────────
 
@@ -224,8 +239,9 @@ function QRCard({
           {status === "pending" && qrData && (
             <div className="flex items-start gap-5">
               {id === "whatsapp" ? (
-                // WA returns a base64 PNG data URL
-                <Image src={qrData} alt="WhatsApp QR" width={120} height={120} className="rounded-xl border border-zinc-200 shrink-0" unoptimized />
+                // plain img — Next.js Image doesn't support data: URLs
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={qrData} alt="WhatsApp QR" width={120} height={120} className="rounded-xl border border-zinc-200 shrink-0" />
               ) : (
                 // Signal returns a linkdevice URI — encode as QR via an inline SVG trick
                 // We display it as a data URL using the browser's canvas
@@ -281,7 +297,18 @@ function SignalQR({ linkUri }: { linkUri: string }) {
 export function IntegrationsPanel() {
   const [connected, setConnected] = useState<Set<IntegrationId>>(new Set())
 
-  const mark = (id: IntegrationId) => setConnected(prev => new Set([...prev, id]))
+  // Load persisted state on mount
+  useEffect(() => {
+    setConnected(loadConnected())
+  }, [])
+
+  const mark = (id: IntegrationId) => {
+    setConnected(prev => {
+      const next = new Set([...prev, id])
+      saveConnected(next)
+      return next
+    })
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
