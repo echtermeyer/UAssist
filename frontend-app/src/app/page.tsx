@@ -1,147 +1,134 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { type Message, normalizeMessage } from "@/lib/mock-data"
-import { fetchMessages, login, signup, getToken, clearToken, openStream } from "@/lib/api"
+import { getToken, clearToken, fetchMessages, openStream } from "@/lib/api"
 import type { RawMessage } from "@/lib/api"
-import { Header } from "@/components/Header"
-import { MessageList } from "@/components/MessageList"
-import { DetailView } from "@/components/DetailView"
-import { IntegrationsPanel } from "@/components/IntegrationsPanel"
+import { Carousel } from "@/components/Carousel"
+import { AuthStep } from "@/components/AuthStep"
+import type { AuthedUser } from "@/components/AuthStep"
+import { QRStep, EmailStep } from "@/components/ConnectSteps"
+import { Dashboard } from "@/components/Dashboard"
+import { Logo } from "@/components/shared"
 
-// ── Auth screens ──────────────────────────────────────────────────────────────
+type Step = "intro" | "auth" | "whatsapp" | "signal" | "email" | "dashboard"
+type Transition = "fwd" | "back"
 
-type AuthMode = "login" | "signup"
+const STEP_LABELS = ["WhatsApp", "Signal", "Email"]
+const STEPS: Step[] = ["intro", "auth", "whatsapp", "signal", "email", "dashboard"]
 
-function AuthScreen({ onAuth }: { onAuth: () => void }) {
-  const [mode, setMode] = useState<AuthMode>("login")
-  const [username, setUsername] = useState("")
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError("")
-    setLoading(true)
-    try {
-      if (mode === "login") {
-        await login(username, password)
-      } else {
-        await signup(username, password)
-      }
-      onAuth()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong")
-    } finally {
-      setLoading(false)
-    }
+function loadConnectedFromStorage(): Set<string> {
+  if (typeof window === "undefined") return new Set()
+  try {
+    const raw = localStorage.getItem("ua_integrations")
+    if (!raw) return new Set()
+    return new Set(JSON.parse(raw) as string[])
+  } catch {
+    return new Set()
   }
-
-  return (
-    <div className="flex h-screen items-center justify-center bg-zinc-50">
-      <div className="w-full max-w-sm bg-white rounded-2xl border border-zinc-200 shadow-sm p-8">
-        <h1 className="text-xl font-bold text-zinc-900 mb-1">UAssist</h1>
-        <p className="text-sm text-zinc-500 mb-6">
-          {mode === "login" ? "Sign in to continue" : "Create your account"}
-        </p>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Username</label>
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder={mode === "login" ? "admin" : "yourname"}
-              className="w-full px-3.5 py-2.5 rounded-lg border border-zinc-200 bg-zinc-50 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-              required
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full px-3.5 py-2.5 rounded-lg border border-zinc-200 bg-zinc-50 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-              required
-              minLength={6}
-            />
-          </div>
-          {error && <p className="text-xs text-rose-600">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-1 w-full py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 active:scale-[0.98] transition-all disabled:opacity-50"
-          >
-            {loading ? (mode === "login" ? "Signing in…" : "Creating account…") : (mode === "login" ? "Sign in" : "Create account")}
-          </button>
-        </form>
-
-        <div className="mt-5 pt-4 border-t border-zinc-100 text-center">
-          {mode === "login" ? (
-            <p className="text-xs text-zinc-500">
-              No account?{" "}
-              <button onClick={() => { setMode("signup"); setError("") }} className="text-emerald-600 font-semibold hover:underline">
-                Sign up
-              </button>
-            </p>
-          ) : (
-            <p className="text-xs text-zinc-500">
-              Already have an account?{" "}
-              <button onClick={() => { setMode("login"); setError("") }} className="text-emerald-600 font-semibold hover:underline">
-                Sign in
-              </button>
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  )
 }
 
-// ── Dashboard ─────────────────────────────────────────────────────────────────
+function saveConnectedToStorage(connected: Set<string>) {
+  localStorage.setItem("ua_integrations", JSON.stringify([...connected]))
+}
 
 export default function Page() {
-  const [authed, setAuthed] = useState<boolean | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
-  const [loading, setLoading] = useState(false)
-  const [selected, setSelected] = useState<Message | null>(null)
+  const [step, setStep] = useState<Step | null>(null)
+  const [transition, setTransition] = useState<Transition>("fwd")
+  const [user, setUser] = useState<AuthedUser | null>(null)
+  const [completed, setCompleted] = useState<number[]>([])
+  const [connected, setConnected] = useState<Set<string>>(new Set())
+  const [messages, setMessages] = useState<RawMessage[]>([])
+  const [loadingMessages, setLoadingMessages] = useState(false)
   const closeStreamRef = useRef<(() => void) | null>(null)
 
+  // On mount: check existing token
   useEffect(() => {
-    setAuthed(!!getToken())
+    if (getToken()) {
+      setConnected(loadConnectedFromStorage())
+      setStep("dashboard")
+    } else {
+      setStep("intro")
+    }
   }, [])
 
+  const goTo = useCallback((next: Step, dir: Transition = "fwd") => {
+    setTransition(dir)
+    setStep(next)
+  }, [])
+
+  const goNext = useCallback(() => {
+    setStep(cur => {
+      if (!cur) return cur
+      const idx = STEPS.indexOf(cur)
+      const next = STEPS[idx + 1] as Step | undefined
+      return next ?? cur
+    })
+    setTransition("fwd")
+  }, [])
+
+  const goBack = useCallback(() => {
+    setStep(cur => {
+      if (!cur) return cur
+      const idx = STEPS.indexOf(cur)
+      const prev = STEPS[idx - 1] as Step | undefined
+      return prev ?? cur
+    })
+    setTransition("back")
+  }, [])
+
+  const markConnected = useCallback((service: string) => {
+    setConnected(prev => {
+      const next = new Set(prev)
+      next.add(service)
+      saveConnectedToStorage(next)
+      return next
+    })
+  }, [])
+
+  const skipAll = useCallback(() => goTo("dashboard"), [goTo])
+
+  const handleLogout = useCallback(() => {
+    clearToken()
+    localStorage.removeItem("ua_integrations")
+    closeStreamRef.current?.()
+    closeStreamRef.current = null
+    setMessages([])
+    setConnected(new Set())
+    setCompleted([])
+    setUser(null)
+    goTo("auth")
+  }, [goTo])
+
+  // Messages + SSE — only active on dashboard
   const loadMessages = useCallback(async () => {
-    setLoading(true)
+    setLoadingMessages(true)
     try {
       const raw = await fetchMessages()
-      setMessages(raw.map(normalizeMessage))
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message === "UNAUTHORIZED") setAuthed(false)
+      setMessages(raw)
+    } catch {
+      // silently ignore; will retry via SSE or polling
     } finally {
-      setLoading(false)
+      setLoadingMessages(false)
     }
   }, [])
 
   const appendMessage = useCallback((raw: RawMessage) => {
-    const msg = normalizeMessage(raw)
     setMessages(prev => {
-      if (prev.find(m => m.id === msg.id)) return prev
-      return [msg, ...prev]
+      if (prev.find(m => m._id === raw._id)) return prev
+      return [raw, ...prev]
     })
   }, [])
 
   useEffect(() => {
-    if (!authed) return
+    if (step !== "dashboard") {
+      closeStreamRef.current?.()
+      closeStreamRef.current = null
+      return
+    }
 
-    // Initial load
     loadMessages()
 
-    // SSE stream for real-time updates
     const close = openStream(appendMessage, () => {
-      // On SSE error fall back to polling every 15s
       const interval = setInterval(loadMessages, 15000)
       return () => clearInterval(interval)
     })
@@ -151,34 +138,127 @@ export default function Page() {
       close()
       closeStreamRef.current = null
     }
-  }, [authed, loadMessages, appendMessage])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step])
 
-  if (authed === null) return null
+  // Not yet determined (hydration)
+  if (step === null) return null
 
-  if (!authed) {
-    return <AuthScreen onAuth={() => setAuthed(true)} />
+  const connectStepIdx = step === "whatsapp" ? 0 : step === "signal" ? 1 : step === "email" ? 2 : -1
+
+  let body: React.ReactNode
+
+  if (step === "intro") {
+    body = (
+      <Carousel
+        onComplete={() => goTo("auth")}
+        onSkip={() => goTo("auth")}
+      />
+    )
+  } else if (step === "auth") {
+    body = (
+      <AuthStep
+        initialMode="signup"
+        onAuthed={(u) => { setUser(u); goTo("whatsapp") }}
+        onBack={() => goTo("intro", "back")}
+        onSkip={skipAll}
+      />
+    )
+  } else if (step === "whatsapp") {
+    body = (
+      <QRStep
+        service="whatsapp"
+        serviceName="WhatsApp"
+        serviceColor="var(--wa)"
+        ServiceIcon={Logo.WhatsApp}
+        stepLabel="Step 01 · WhatsApp"
+        lede="Link your WhatsApp account in seconds by scanning a QR code. UAssist works like WhatsApp Web — no extra app needed."
+        benefits={[
+          "All chats, contacts and media — synced automatically",
+          "Send and reply right from your UAssist dashboard",
+          "Disconnect instantly from Settings at any time",
+        ]}
+        steps={[
+          "Open WhatsApp on your phone",
+          "Tap ⋮ → Linked Devices → Link a Device",
+          "Point your camera at the QR code",
+        ]}
+        stepLabels={STEP_LABELS}
+        current={0}
+        completed={completed}
+        onConnected={() => { markConnected("whatsapp"); setCompleted(c => [...c, 0]); goTo("signal") }}
+        onSkip={() => { setCompleted(c => [...c]); goTo("signal") }}
+        onBack={() => goTo("auth", "back")}
+      />
+    )
+  } else if (step === "signal") {
+    body = (
+      <QRStep
+        service="signal"
+        serviceName="Signal"
+        serviceColor="var(--signal)"
+        ServiceIcon={Logo.Signal}
+        stepLabel="Step 02 · Signal"
+        lede="Link Signal Desktop to read and reply to your encrypted messages — fully end-to-end, just like the app."
+        benefits={[
+          "Full end-to-end encryption, always on",
+          "Read and send messages without touching your phone",
+          "Signal never sees your message content — and neither do we",
+        ]}
+        steps={[
+          "Open Signal on your phone",
+          "Go to Settings → Linked Devices",
+          "Tap + and scan the QR code",
+        ]}
+        stepLabels={STEP_LABELS}
+        current={1}
+        completed={completed}
+        onConnected={() => { markConnected("signal"); setCompleted(c => [...c, 1]); goTo("email") }}
+        onSkip={() => goTo("email")}
+        onBack={() => goTo("whatsapp", "back")}
+      />
+    )
+  } else if (step === "email") {
+    body = (
+      <EmailStep
+        stepLabels={STEP_LABELS}
+        current={2}
+        completed={completed}
+        stepLabel="Step 03 · Email"
+        onConnected={(accounts) => {
+          if (accounts.length > 0) markConnected("email")
+          setCompleted(c => [...c, 2])
+          goTo("dashboard")
+        }}
+        onSkip={() => goTo("dashboard")}
+        onBack={() => goTo("signal", "back")}
+      />
+    )
+  } else {
+    body = (
+      <Dashboard
+        user={user ?? undefined}
+        connected={connected}
+        messages={messages}
+        loadingMessages={loadingMessages}
+        onConnect={(service) => {
+          if (service === "whatsapp") goTo("whatsapp")
+          else if (service === "signal") goTo("signal")
+          else if (service === "email") goTo("email")
+        }}
+        onLogout={handleLogout}
+        onReset={() => { goTo("intro") }}
+      />
+    )
   }
 
   return (
-    <div className="flex h-screen bg-zinc-50">
-      <div className="w-1/2 flex flex-col border-r border-zinc-200 overflow-hidden">
-        <Header onLogout={() => { clearToken(); localStorage.removeItem("ua_integrations"); closeStreamRef.current?.(); setAuthed(false) }} />
-        <div className="flex flex-1 overflow-hidden">
-          <div className="w-[42%] flex flex-col border-r border-zinc-100 overflow-hidden bg-zinc-50">
-            <MessageList
-              messages={messages}
-              loading={loading && messages.length === 0}
-              selectedId={selected?.id ?? null}
-              onSelect={setSelected}
-            />
-          </div>
-          <div className="flex-1 flex flex-col overflow-hidden bg-white">
-            <DetailView message={selected} onRefresh={loadMessages} />
-          </div>
-        </div>
-      </div>
-      <div className="w-1/2 flex flex-col overflow-hidden">
-        <IntegrationsPanel />
+    <div className="app-shell">
+      <div
+        className={`scene-wrap scene-${step} ${transition === "back" ? "scene-back" : "scene-fwd"}`}
+        key={step}
+      >
+        {body}
       </div>
     </div>
   )
