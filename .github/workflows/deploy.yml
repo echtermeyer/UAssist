@@ -21,20 +21,13 @@ jobs:
             cd /home/deploy/UAssist
             git pull origin main
 
-            cd whatsapp-integration
+            cd api
             npm install --production
-            pm2 reload uassist --update-env || pm2 start /home/deploy/ecosystem.config.js --only uassist
+            pm2 reload api --update-env
 
-            cd ../email-integration
-            npm install --production
-            pm2 reload email --update-env || pm2 start /home/deploy/ecosystem.config.js --only email
-
-            cd ../signal-integration
-            npm install --production
-            pm2 reload signal --update-env || pm2 start /home/deploy/ecosystem.config.js --only signal
-
-            cd ../api
-            npm install --production
-            pm2 reload api --update-env || pm2 start /home/deploy/ecosystem.config.js --only api
+            cd ../frontend-app
+            npm install
+            npm run build
+            pm2 reload frontend --update-env
 
             pm2 save
