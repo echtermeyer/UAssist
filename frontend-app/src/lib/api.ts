@@ -58,7 +58,7 @@ export async function signup(username: string, password: string) {
 }
 
 export async function loginDemo() {
-  return login("demo", "demo123")
+  return login("+490000000000", "000000")
 }
 
 export async function logout() {

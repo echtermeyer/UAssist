@@ -2,9 +2,9 @@ require('dotenv').config();
 const { MongoClient } = require('mongodb');
 const bcrypt = require('bcryptjs');
 
-const DEMO_USERNAME = 'demo';
-const DEMO_PASSWORD = 'demo123';
-const DEMO_TENANT = 'demo';
+const DEMO_USERNAME = '+490000000000';
+const DEMO_PASSWORD = '000000';
+const DEMO_TENANT = '_490000000000';
 
 const now = Date.now();
 const ago = ms => new Date(now - ms);
