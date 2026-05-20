@@ -3,6 +3,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const { MongoClient } = require('mongodb');
 const path = require('path');
+const fs = require('fs');
 
 const TENANT_ID = process.env.TENANT_ID || 'default';
 const WA_DATA_PATH = process.env.WA_DATA_PATH || path.join(__dirname, '.wwebjs_auth');
@@ -84,5 +85,8 @@ client.on('message', async msg => {
         console.error('Failed to save message:', err.message);
     }
 });
+
+const lockFile = path.join(WA_DATA_PATH, `session-${TENANT_ID}`, 'SingletonLock');
+try { fs.unlinkSync(lockFile); } catch {}
 
 client.initialize();
