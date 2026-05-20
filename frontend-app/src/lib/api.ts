@@ -1,20 +1,5 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
 
-// ── Token storage ────────────────────────────────────────────────────────────
-
-export function getToken(): string | null {
-  if (typeof window === "undefined") return null
-  return localStorage.getItem("ua_token")
-}
-
-export function setToken(token: string) {
-  localStorage.setItem("ua_token", token)
-}
-
-export function clearToken() {
-  localStorage.removeItem("ua_token")
-}
-
 // ── Raw backend types ────────────────────────────────────────────────────────
 
 export type RawMessage = {
@@ -37,12 +22,11 @@ export type RawMessage = {
 // ── Fetch helper ─────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken()
   const res = await fetch(`${BASE}${path}`, {
     ...options,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   })
@@ -50,7 +34,6 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
     const body = await res.json().catch(() => ({}))
     const message = (body as { error?: string }).error || `HTTP ${res.status}`
     if (res.status === 401 && message !== "Invalid credentials" && message !== "Username already taken") {
-      clearToken()
       throw new Error("UNAUTHORIZED")
     }
     throw new Error(message)
@@ -61,21 +44,29 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 export async function login(username: string, password: string) {
-  const data = await apiFetch<{ token: string; tenantId: string; role: string }>("/auth/login", {
+  return apiFetch<{ tenantId: string; role: string }>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ username, password }),
   })
-  setToken(data.token)
-  return data
 }
 
 export async function signup(username: string, password: string) {
-  const data = await apiFetch<{ token: string; tenantId: string; role: string }>("/auth/signup", {
+  return apiFetch<{ tenantId: string; role: string }>("/auth/signup", {
     method: "POST",
     body: JSON.stringify({ username, password }),
   })
-  setToken(data.token)
-  return data
+}
+
+export async function logout() {
+  return apiFetch("/auth/logout", { method: "POST" })
+}
+
+export async function getMe(): Promise<{ userId: string; username: string; tenantId: string; role: string } | null> {
+  try {
+    return await apiFetch("/auth/me")
+  } catch {
+    return null
+  }
 }
 
 // ── Messages ─────────────────────────────────────────────────────────────────
@@ -88,21 +79,12 @@ export async function fetchMessages(service?: "whatsapp" | "email" | "signal" | 
 // ── SSE stream ────────────────────────────────────────────────────────────────
 
 export function openStream(onMessage: (raw: RawMessage) => void, onError?: () => void): () => void {
-  const token = getToken()
   const url = `${BASE}/stream`
-  const es = new EventSource(url, {
-    // EventSource doesn't support custom headers — pass token as query param
-  } as EventSourceInit)
-
-  // Since EventSource can't send Authorization header, we use a workaround:
-  // close the native EventSource and use fetch-based SSE instead
-  es.close()
-
   let closed = false
   const controller = new AbortController()
 
   fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
     signal: controller.signal,
   }).then(async res => {
     if (!res.ok || !res.body) { onError?.(); return }

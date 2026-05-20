@@ -18,18 +18,9 @@ function resolveHost(email) {
     return IMAP_HOSTS[domain] ?? `imap.${domain}`;
 }
 
-async function getCredentials(db) {
-    const TENANT_ID = process.env.TENANT_ID;
-    // Prefer DB-stored credentials (set during onboarding)
-    if (TENANT_ID) {
-        const user = await db.collection('users').findOne({ tenantId: TENANT_ID });
-        if (user?.emailAddress && user?.emailPassword) {
-            return { email: user.emailAddress, password: user.emailPassword };
-        }
-    }
-    // Fallback: env vars (legacy / default tenant)
+function getCredentials() {
     const email = process.env.EMAIL;
-    const password = process.env.PASSWORD;
+    const password = process.env.EMAIL_PASSWORD || process.env.PASSWORD;
     if (!email || !password) return null;
     return { email, password };
 }
@@ -41,7 +32,7 @@ async function run() {
     const collection = db.collection('email');
     console.log('✅ MongoDB ready!');
 
-    const creds = await getCredentials(db);
+    const creds = getCredentials();
     if (!creds) {
         console.error('No email credentials found. Set EMAIL/PASSWORD env vars or complete onboarding.');
         process.exit(1);

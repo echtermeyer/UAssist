@@ -6,6 +6,7 @@ const ECOSYSTEM_PATH = process.env.ECOSYSTEM_PATH || '/home/deploy/ecosystem.con
 const UASSIST_ROOT = process.env.UASSIST_ROOT || '/home/deploy/UAssist';
 const MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017/uassist';
 const SIGNAL_CLI_PATH = process.env.SIGNAL_CLI_PATH || 'signal-cli';
+const WRAPPER = `${UASSIST_ROOT}/scripts/run-as-tenant.sh`;
 
 // Linux user for a tenant — each gets an isolated home directory
 function tenantLinuxUser(tenantId) {
@@ -65,77 +66,91 @@ function writeEcosystem(config) {
     fs.writeFileSync(ECOSYSTEM_PATH, content, 'utf-8');
 }
 
-async function provisionTenant(tenantId, { emailAddress, signalPhone, slackBotToken } = {}) {
+async function provisionTenant(tenantId, { emailAddress, emailPassword, signalPhone, slackBotToken, slackAppToken, tenantMongoUrl } = {}) {
     const { user, home } = ensureLinuxUser(tenantId);
     const config = readEcosystem();
     const newApps = [];
+    const mongoUrl = tenantMongoUrl || MONGO_URL;
 
-    // WhatsApp process — runs as the tenant's Linux user
+    // WhatsApp process — wrapper re-execs node as tenant's Linux user
     const waName = `uassist_${tenantId}`;
     if (!config.apps.find(a => a.name === waName)) {
         newApps.push({
             name: waName,
-            script: `${UASSIST_ROOT}/whatsapp-integration/index.js`,
+            interpreter: '/bin/bash',
+            script: WRAPPER,
             cwd: `${UASSIST_ROOT}/whatsapp-integration`,
-            uid: user,
             env: {
-                MONGO_URL,
+                TENANT_USER: user,
+                MAIN_SCRIPT: `${UASSIST_ROOT}/whatsapp-integration/index.js`,
+                MONGO_URL: mongoUrl,
                 TENANT_ID: tenantId,
-                WA_DATA_PATH: home,  // sessions go in /home/ua_<tid>/wa-session/
+                WA_DATA_PATH: home,
+                HOME: home,
+                CHROMIUM_PATH: process.env.CHROMIUM_PATH || '/usr/bin/google-chrome',
             },
         });
     }
 
-    // Signal process — runs as the tenant's Linux user
+    // Signal process — wrapper re-execs node as tenant's Linux user
     if (signalPhone) {
         const sigName = `signal_${tenantId}`;
         if (!config.apps.find(a => a.name === sigName)) {
             newApps.push({
                 name: sigName,
-                script: `${UASSIST_ROOT}/signal-integration/index.js`,
+                interpreter: '/bin/bash',
+                script: WRAPPER,
                 cwd: `${UASSIST_ROOT}/signal-integration`,
-                uid: user,
                 env: {
-                    MONGO_URL,
+                    TENANT_USER: user,
+                    MAIN_SCRIPT: `${UASSIST_ROOT}/signal-integration/index.js`,
+                    MONGO_URL: mongoUrl,
                     TENANT_ID: tenantId,
                     SIGNAL_CLI_PATH,
                     SIGNAL_PHONE: signalPhone,
-                    HOME: home,   // signal-cli reads/writes to $HOME/.local/share/signal-cli
+                    HOME: home,
                 },
             });
         }
     }
 
-    // Email process — runs as the tenant's Linux user; reads creds from MongoDB
-    if (emailAddress) {
+    // Email process — credentials injected as env vars
+    if (emailAddress && emailPassword) {
         const emailName = `email_${tenantId}`;
         if (!config.apps.find(a => a.name === emailName)) {
             newApps.push({
                 name: emailName,
-                script: `${UASSIST_ROOT}/email-integration/index.js`,
+                interpreter: '/bin/bash',
+                script: WRAPPER,
                 cwd: `${UASSIST_ROOT}/email-integration`,
-                uid: user,
                 env: {
-                    MONGO_URL,
+                    TENANT_USER: user,
+                    MAIN_SCRIPT: `${UASSIST_ROOT}/email-integration/index.js`,
+                    MONGO_URL: mongoUrl,
                     TENANT_ID: tenantId,
-                    // No EMAIL/PASSWORD — process reads from MongoDB users collection
+                    EMAIL: emailAddress,
+                    EMAIL_PASSWORD: emailPassword,
                 },
             });
         }
     }
 
-    // Slack process — tokens are read from MongoDB by the process itself
-    if (slackBotToken) {
+    // Slack process — tokens injected as env vars
+    if (slackBotToken && slackAppToken) {
         const slackName = `slack_${tenantId}`;
         if (!config.apps.find(a => a.name === slackName)) {
             newApps.push({
                 name: slackName,
-                script: `${UASSIST_ROOT}/slack-integration/index.js`,
+                interpreter: '/bin/bash',
+                script: WRAPPER,
                 cwd: `${UASSIST_ROOT}/slack-integration`,
-                uid: user,
                 env: {
-                    MONGO_URL,
+                    TENANT_USER: user,
+                    MAIN_SCRIPT: `${UASSIST_ROOT}/slack-integration/index.js`,
+                    MONGO_URL: mongoUrl,
                     TENANT_ID: tenantId,
+                    SLACK_BOT_TOKEN: slackBotToken,
+                    SLACK_APP_TOKEN: slackAppToken,
                 },
             });
         }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { getToken, clearToken, fetchMessages, openStream } from "@/lib/api"
+import { getMe, logout, fetchMessages, openStream } from "@/lib/api"
 import type { RawMessage } from "@/lib/api"
 import { Carousel } from "@/components/Carousel"
 import { AuthStep } from "@/components/AuthStep"
@@ -41,14 +41,16 @@ export default function Page() {
   const [loadingMessages, setLoadingMessages] = useState(false)
   const closeStreamRef = useRef<(() => void) | null>(null)
 
-  // On mount: check existing token
+  // On mount: check session via cookie
   useEffect(() => {
-    if (getToken()) {
-      setConnected(loadConnectedFromStorage())
-      setStep("dashboard")
-    } else {
-      setStep("intro")
-    }
+    getMe().then(me => {
+      if (me) {
+        setConnected(loadConnectedFromStorage())
+        setStep("dashboard")
+      } else {
+        setStep("intro")
+      }
+    })
   }, [])
 
   const goTo = useCallback((next: Step, dir: Transition = "fwd") => {
@@ -87,8 +89,8 @@ export default function Page() {
 
   const skipAll = useCallback(() => goTo("dashboard"), [goTo])
 
-  const handleLogout = useCallback(() => {
-    clearToken()
+  const handleLogout = useCallback(async () => {
+    await logout().catch(() => {})
     localStorage.removeItem("ua_integrations")
     closeStreamRef.current?.()
     closeStreamRef.current = null

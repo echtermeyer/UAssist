@@ -9,13 +9,7 @@ let collection;
 let outbox;
 let slackApp;
 
-async function getCredentials(db) {
-    if (TENANT_ID) {
-        const user = await db.collection('users').findOne({ tenantId: TENANT_ID });
-        if (user?.slackBotToken && user?.slackAppToken) {
-            return { botToken: user.slackBotToken, appToken: user.slackAppToken };
-        }
-    }
+async function getCredentials() {
     const botToken = process.env.SLACK_BOT_TOKEN;
     const appToken = process.env.SLACK_APP_TOKEN;
     if (!botToken || !appToken) return null;
@@ -30,7 +24,7 @@ async function run() {
     await outbox.createIndex({ _createdAt: 1 }, { expireAfterSeconds: 604800 });
     console.log('✅ MongoDB ready!');
 
-    const creds = await getCredentials(db);
+    const creds = await getCredentials();
     if (!creds) {
         console.error('No Slack credentials found. Complete onboarding or set SLACK_BOT_TOKEN/SLACK_APP_TOKEN.');
         process.exit(1);

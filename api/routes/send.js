@@ -1,5 +1,5 @@
 const { Router } = require('express');
-const { getDb } = require('../lib/db');
+const { getTenantDb } = require('../lib/db');
 const signal = require('../lib/signal');
 const { sendMail } = require('../lib/mailer');
 
@@ -9,7 +9,7 @@ router.post('/whatsapp', async (req, res, next) => {
     const { to, message } = req.body;
     if (!to || !message) return res.status(400).json({ error: 'to and message are required' });
     try {
-        const result = await getDb().collection('whatsapp_outbox').insertOne({
+        const result = await getTenantDb(req.user.tenantId).collection('whatsapp_outbox').insertOne({
             to,
             message,
             status: 'pending',
@@ -48,7 +48,7 @@ router.post('/slack', async (req, res, next) => {
     const { to, message } = req.body;
     if (!to || !message) return res.status(400).json({ error: 'to and message are required' });
     try {
-        const result = await getDb().collection('slack_outbox').insertOne({
+        const result = await getTenantDb(req.user.tenantId).collection('slack_outbox').insertOne({
             to,
             message,
             status: 'pending',

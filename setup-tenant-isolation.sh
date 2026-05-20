@@ -32,8 +32,9 @@ deploy ALL=(root) NOPASSWD: /bin/chown ua_*\:ua_* /home/ua_*
 deploy ALL=(root) NOPASSWD: /bin/mkdir -p /home/ua_*
 deploy ALL=(root) NOPASSWD: /bin/chown -R ua_*\:ua_* /home/ua_*
 
-# Run integration processes as tenant users
+# Run integration processes as tenant users (node directly or via env for wrapper script)
 deploy ALL=(ua_*) NOPASSWD: /usr/bin/node *
+deploy ALL=(ua_*) NOPASSWD: /usr/bin/env *
 deploy ALL=(ua_*) NOPASSWD: /usr/local/bin/signal-cli *
 deploy ALL=(ua_*) NOPASSWD: /usr/bin/signal-cli *
 SUDOERS
