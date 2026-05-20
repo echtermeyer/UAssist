@@ -35,6 +35,8 @@ jobs:
             pm2 reload api --update-env
             pm2 reload frontend --update-env
 
+            cd api && node seed-demo.js && cd ..
+
             pm2 jlist | python3 -c "
             import sys, json, subprocess
             for p in json.load(sys.stdin):

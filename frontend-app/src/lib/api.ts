@@ -57,11 +57,15 @@ export async function signup(username: string, password: string) {
   })
 }
 
+export async function loginDemo() {
+  return login("demo", "demo123")
+}
+
 export async function logout() {
   return apiFetch("/auth/logout", { method: "POST" })
 }
 
-export async function getMe(): Promise<{ userId: string; username: string; tenantId: string; role: string } | null> {
+export async function getMe(): Promise<{ userId: string; username: string; tenantId: string; role: string; onboarding: Record<string, string> } | null> {
   try {
     return await apiFetch("/auth/me")
   } catch {

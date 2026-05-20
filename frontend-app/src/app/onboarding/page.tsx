@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { getMe } from "@/lib/api"
+import { getMe, loginDemo } from "@/lib/api"
 import { Carousel } from "@/components/Carousel"
 import { AuthStep } from "@/components/AuthStep"
 import type { AuthedUser } from "@/components/AuthStep"
@@ -139,7 +139,7 @@ export default function OnboardingPage() {
           <button
             className="skip-link"
             style={{ fontSize: 11, color: "var(--ink-faint)", opacity: 0.5 }}
-            onClick={() => router.push("/home")}
+            onClick={async () => { try { await loginDemo() } catch {} router.push("/home") }}
           >
             Demo platform
           </button>

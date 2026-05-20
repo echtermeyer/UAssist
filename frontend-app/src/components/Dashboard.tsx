@@ -46,26 +46,6 @@ function toInboxRow(msg: RawMessage): InboxRow {
 
 // ─── Seed data ────────────────────────────────────────────────────────────────
 
-const MESSAGES: InboxRow[] = [
-  { id: "1", ch: "whatsapp", name: "Lena Mohr", preview: "Can you grab oat milk on your way home? And maybe pick the kid up at 16:30?", time: "09:14", unread: true, initial: "L", color: "#1f7a4a" },
-  { id: "2", ch: "signal", name: "Jonas Reuter", preview: "Moved our Thursday review to 14:00 — works?", time: "09:22", unread: true, initial: "J", color: "#2c4ea8" },
-  { id: "3", ch: "email", name: "Deutsche Bahn", preview: "Your ICE 1573 to München has been rebooked to platform 7.", time: "09:31", unread: true, initial: "D", color: "#8c5a1d" },
-  { id: "4", ch: "email", name: "Stripe", preview: "Invoice #INV-4421 for €840.00 was paid by Northstar GmbH.", time: "08:47", unread: false, initial: "S", color: "#635bff" },
-  { id: "5", ch: "whatsapp", name: "Family group", preview: "Mama: Sunday lunch at our place — bring something sweet?", time: "08:12", unread: false, initial: "F", color: "#1f7a4a" },
-  { id: "6", ch: "signal", name: "Mira Köhler", preview: "The contract draft you wanted, v3. Take a look when you can.", time: "Yesterday", unread: false, initial: "M", color: "#2c4ea8" },
-  { id: "7", ch: "email", name: "GitHub", preview: "[uassist/api] PR #218: Add tenant-scoped onboarding hooks", time: "Yesterday", unread: false, initial: "G", color: "#24292e" },
-  { id: "8", ch: "whatsapp", name: "Tomek Z.", preview: "Yo — climbing at 19? Bouldering hall by the canal.", time: "Mon", unread: false, initial: "T", color: "#1f7a4a" },
-  { id: "9", ch: "email", name: "Notion", preview: "3 pages were updated in the Q3 planning space.", time: "Mon", unread: false, initial: "N", color: "#000" },
-  { id: "10", ch: "signal", name: "Anna B.", preview: "Thanks for the recommendation — booked the tasting for Saturday.", time: "Sun", unread: false, initial: "A", color: "#2c4ea8" },
-]
-
-const TODOS = [
-  { id: 1, text: "Pick up oat milk on the way home", meta: "From Lena · WhatsApp · today", done: false },
-  { id: 2, text: "Confirm Thursday 14:00 review with Jonas", meta: "From Jonas · Signal · today", done: false },
-  { id: 3, text: "Review contract draft v3", meta: "From Mira · Signal · yesterday", done: true },
-  { id: 4, text: "RSVP family lunch Sunday", meta: "From Mama · WhatsApp · today", done: false },
-]
-
 const CHANNEL_META = {
   all: { label: "Everything", color: "var(--ink)" },
   whatsapp: { label: "WhatsApp", color: "var(--wa)" },
@@ -91,15 +71,14 @@ type DashboardProps = {
 
 export function Dashboard({
   user,
-  connected = new Set(["whatsapp", "signal", "email"]),
+  connected = new Set(),
   messages,
   loadingMessages,
   onConnect,
   onLogout,
 }: DashboardProps) {
   const [active, setActive] = useState("all")
-  const [todos, setTodos] = useState(TODOS)
-  const [selected, setSelected] = useState<string | null>("1")
+  const [selected, setSelected] = useState<string | null>(null)
 
   const allServices = ["whatsapp", "signal", "email"]
   const missing = allServices.filter(s => !connected.has(s))
@@ -110,10 +89,7 @@ export function Dashboard({
   const greeting = hour < 5 ? "Still up" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
   const dateStr = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })
 
-  const inboxRows: InboxRow[] = useMemo(() => {
-    if (messages && messages.length > 0) return messages.map(toInboxRow)
-    return MESSAGES
-  }, [messages])
+  const inboxRows: InboxRow[] = useMemo(() => (messages ?? []).map(toInboxRow), [messages])
 
   const visibleMessages = useMemo(() => {
     return inboxRows.filter(m => connected.has(m.ch))
@@ -124,7 +100,8 @@ export function Dashboard({
     return visibleMessages.filter(m => m.ch === active)
   }, [active, visibleMessages])
 
-  const toggleTodo = (id: number) => setTodos(ts => ts.map(t => t.id === id ? { ...t, done: !t.done } : t))
+  const hasData = visibleMessages.length > 0
+  const hasConnected = connected.size > 0
 
   return (
     <div className="dash-shell">
@@ -226,7 +203,7 @@ export function Dashboard({
           </div>
           <div className="meta">
             {dateStr}<br />
-            {loadingMessages ? "Loading messages…" : `${visibleMessages.filter(m => m.unread).length} new since 07:00`}
+            {loadingMessages ? "Loading messages…" : hasData ? `${visibleMessages.filter(m => m.unread).length} new since 07:00` : "Connect a service to get started"}
           </div>
         </div>
 
@@ -234,12 +211,16 @@ export function Dashboard({
           <div className="connect-more-card">
             <div className="cmc-head">
               <div>
-                <div className="eyebrow" style={{ color: "var(--accent)" }}>Get more from UAssist</div>
+                <div className="eyebrow" style={{ color: "var(--accent)" }}>{hasConnected ? "Get more from UAssist" : "Welcome to UAssist"}</div>
                 <h3 className="cmc-title">
-                  Connect {missing.length === 1 ? "one more channel" : `${missing.length} more channels`} to see your full picture.
+                  {hasConnected
+                    ? `Connect ${missing.length === 1 ? "one more channel" : `${missing.length} more channels`} to see your full picture.`
+                    : "Connect your first service to get started."}
                 </h3>
                 <p className="cmc-sub">
-                  UAssist works with whatever you&apos;ve connected — but the assistant gets sharper the more sources it can listen to.
+                  {hasConnected
+                    ? "UAssist works with whatever you've connected — but the assistant gets sharper the more sources it can listen to."
+                    : "UAssist unifies your WhatsApp, Signal, and email into one calm surface. Connect a service below and your messages will appear here within seconds."}
                 </p>
               </div>
             </div>
@@ -262,67 +243,107 @@ export function Dashboard({
           </div>
         )}
 
-        <div className="section-h">
-          <span className="t serif">What matters today</span>
-          <span className="a">AI digest · refreshed 2m ago</span>
-        </div>
+        {hasData ? (
+          <>
+            <div className="section-h">
+              <span className="t serif">What matters today</span>
+              <span className="a">AI digest · refreshed 2m ago</span>
+            </div>
 
-        <div className="digest-grid">
-          <div className="digest-card">
-            <span className="kind"><span className="k-dot" style={{ background: "var(--insight)" }} /> Tasks · 4</span>
-            <div className="title-line">
-              <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>Oat milk</span> on the way home, and confirm a{" "}
-              <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>Thursday review</span> with Jonas.
+            <div className="digest-grid">
+              <div className="digest-card">
+                <span className="kind"><span className="k-dot" style={{ background: "var(--insight)" }} /> Tasks · 4</span>
+                <div className="title-line">
+                  <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>Oat milk</span> on the way home, and confirm a{" "}
+                  <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>Thursday review</span> with Jonas.
+                </div>
+                <div className="ctx"><span className="ch-dot" /> Pulled from WhatsApp, Signal</div>
+              </div>
+              <div className="digest-card">
+                <span className="kind"><span className="k-dot" style={{ background: "var(--accent)" }} /> Schedule</span>
+                <div className="title-line">
+                  School pickup moved to <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>16:30</span>. Family lunch Sunday — bring something sweet.
+                </div>
+                <div className="ctx"><span className="ch-dot" /> WhatsApp · Lena, Mama</div>
+              </div>
+              <div className="digest-card">
+                <span className="kind"><span className="k-dot" style={{ background: "var(--email)" }} /> Heads up</span>
+                <div className="title-line">
+                  Your <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>ICE to München</span> changed to platform 7. Stripe invoice paid: €840.
+                </div>
+                <div className="ctx"><span className="ch-dot" /> Email · Deutsche Bahn, Stripe</div>
+              </div>
             </div>
-            <div className="ctx"><span className="ch-dot" /> Pulled from WhatsApp, Signal</div>
-          </div>
-          <div className="digest-card">
-            <span className="kind"><span className="k-dot" style={{ background: "var(--accent)" }} /> Schedule</span>
-            <div className="title-line">
-              School pickup moved to <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>16:30</span>. Family lunch Sunday — bring something sweet.
+          </>
+        ) : hasConnected ? (
+          <div className="digest-grid">
+            <div className="digest-card" style={{ opacity: 0.55, gridColumn: "1 / -1" }}>
+              <span className="kind"><span className="k-dot" style={{ background: "var(--ink-mute)" }} /> AI digest · waiting for data</span>
+              <div className="title-line" style={{ color: "var(--ink-mute)", fontSize: 15 }}>
+                Once messages arrive, UAssist will surface tasks, schedule items, and things that need your attention — all in one digest.
+              </div>
+              <div className="ctx"><span className="ch-dot" /> Pulled from your connected services</div>
             </div>
-            <div className="ctx"><span className="ch-dot" /> WhatsApp · Lena, Mama</div>
           </div>
-          <div className="digest-card">
-            <span className="kind"><span className="k-dot" style={{ background: "var(--email)" }} /> Heads up</span>
-            <div className="title-line">
-              Your <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>ICE to München</span> changed to platform 7. Stripe invoice paid: €840.
-            </div>
-            <div className="ctx"><span className="ch-dot" /> Email · Deutsche Bahn, Stripe</div>
+        ) : (
+          <div className="digest-grid">
+            {[
+              { dot: "var(--insight)", label: "Tasks", desc: "UAssist spots action items in your conversations and surfaces them before you forget." },
+              { dot: "var(--accent)", label: "Schedule", desc: "Times, appointments, and plans mentioned in any message — collected automatically." },
+              { dot: "var(--email)", label: "Heads up", desc: "Important emails, alerts, and things that need a quick read, filtered from the noise." },
+            ].map(({ dot, label, desc }) => (
+              <div key={label} className="digest-card" style={{ opacity: 0.45 }}>
+                <span className="kind"><span className="k-dot" style={{ background: dot }} /> {label}</span>
+                <div className="title-line" style={{ color: "var(--ink-mute)", fontSize: 14, fontStyle: "normal" }}>{desc}</div>
+                <div className="ctx" style={{ opacity: 0 }}>placeholder</div>
+              </div>
+            ))}
           </div>
-        </div>
+        )}
 
         <div className="section-h">
           <span className="t serif">Inbox</span>
           <span className="a" style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <I.Search size={11} /> Search <span className="kbd">⌘K</span>
-            </span>
-            <span>{filtered.length} messages</span>
+            {hasData && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <I.Search size={11} /> Search <span className="kbd">⌘K</span>
+              </span>
+            )}
+            <span>{hasData ? `${filtered.length} messages` : "No messages yet"}</span>
           </span>
         </div>
 
-        <div className="inbox-list">
-          {filtered.map(m => (
-            <div
-              key={m.id}
-              className={`inbox-row ${m.unread ? "unread" : ""} ${selected === m.id ? "selected" : ""}`}
-              onClick={() => setSelected(m.id)}
-              style={selected === m.id ? { background: "var(--paper-soft)" } : undefined}
-            >
-              <div className="av" style={{ background: m.color }}>{m.initial}</div>
-              <div className="mid">
-                <div className="name-row">
-                  <span className="nm">{m.name}</span>
-                  <ChannelTag ch={m.ch} />
-                  {m.unread && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)" }} />}
+        {hasData ? (
+          <div className="inbox-list">
+            {filtered.map(m => (
+              <div
+                key={m.id}
+                className={`inbox-row ${m.unread ? "unread" : ""} ${selected === m.id ? "selected" : ""}`}
+                onClick={() => setSelected(m.id)}
+                style={selected === m.id ? { background: "var(--paper-soft)" } : undefined}
+              >
+                <div className="av" style={{ background: m.color }}>{m.initial}</div>
+                <div className="mid">
+                  <div className="name-row">
+                    <span className="nm">{m.name}</span>
+                    <ChannelTag ch={m.ch} />
+                    {m.unread && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)" }} />}
+                  </div>
+                  <div className="preview">{m.preview}</div>
                 </div>
-                <div className="preview">{m.preview}</div>
+                <div className="time">{m.time}</div>
               </div>
-              <div className="time">{m.time}</div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ padding: "40px 0", textAlign: "center", color: "var(--ink-faint)" }}>
+            <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+              {hasConnected
+                ? "Your messages will appear here as they arrive."
+                : "Connect WhatsApp, Signal, or Email above and your messages will flow in here."}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </main>
 
       {/* ─── Right rail ─── */}
@@ -332,41 +353,62 @@ export function Dashboard({
           Your <span className="it">assistant</span>
         </div>
 
-        <div className="assistant-bubble fade-enter">
-          <div className="from">
-            <span className="av">
-              <BrandLogo size={18} color="transparent" fg="var(--accent)" />
-            </span>
-            UAssist · 2 min ago
-          </div>
-          <div className="body">
-            You have <em>three things</em> to handle before noon: pick up oat milk for Lena, confirm the Thursday review with Jonas, and your train moved to <em>platform 7</em>.
-            <br /><br />
-            Want me to message Jonas back about 14:00?
-          </div>
-          <div className="actions">
-            <button className="a primary">Yes, reply 14:00 works</button>
-            <button className="a">Snooze 1h</button>
-            <button className="a">Not now</button>
-          </div>
-        </div>
-
-        <div>
-          <div className="label-mono" style={{ marginBottom: 12 }}>Open todos · {todos.filter(t => !t.done).length}</div>
-          <div className="todo-list">
-            {todos.map(t => (
-              <div key={t.id} className={`todo-row ${t.done ? "done" : ""}`}>
-                <span className={`check ${t.done ? "done" : ""}`} onClick={() => toggleTodo(t.id)}>
-                  {t.done && <I.CheckSm style={{ color: "#fff", marginTop: 1 }} />}
+        {hasData ? (
+          <>
+            <div className="assistant-bubble fade-enter">
+              <div className="from">
+                <span className="av">
+                  <BrandLogo size={18} color="transparent" fg="var(--accent)" />
                 </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="t">{t.text}</div>
-                  <div className="meta">{t.meta}</div>
-                </div>
+                UAssist · 2 min ago
               </div>
-            ))}
+              <div className="body">
+                You have <em>three things</em> to handle before noon: pick up oat milk for Lena, confirm the Thursday review with Jonas, and your train moved to <em>platform 7</em>.
+                <br /><br />
+                Want me to message Jonas back about 14:00?
+              </div>
+              <div className="actions">
+                <button className="a primary">Yes, reply 14:00 works</button>
+                <button className="a">Snooze 1h</button>
+                <button className="a">Not now</button>
+              </div>
+            </div>
+
+            <div>
+              <div className="label-mono" style={{ marginBottom: 12 }}>Open todos · 3</div>
+              <div className="todo-list">
+                {[
+                  { id: 1, text: "Pick up oat milk on the way home", meta: "From Lena · WhatsApp · today", done: false },
+                  { id: 2, text: "Confirm Thursday 14:00 review with Jonas", meta: "From Jonas · Signal · today", done: false },
+                  { id: 3, text: "Review contract draft v3", meta: "From Mira · Signal · yesterday", done: true },
+                  { id: 4, text: "RSVP family lunch Sunday", meta: "From Mama · WhatsApp · today", done: false },
+                ].map(t => (
+                  <div key={t.id} className={`todo-row ${t.done ? "done" : ""}`}>
+                    <span className={`check ${t.done ? "done" : ""}`}>
+                      {t.done && <I.CheckSm style={{ color: "#fff", marginTop: 1 }} />}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="t">{t.text}</div>
+                      <div className="meta">{t.meta}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="assistant-bubble fade-enter" style={{ opacity: 0.55 }}>
+            <div className="from">
+              <span className="av">
+                <BrandLogo size={18} color="transparent" fg="var(--accent)" />
+              </span>
+              UAssist
+            </div>
+            <div className="body">
+              Connect your services and I'll start reading your messages. I'll surface tasks, reminders, and things that need your attention — so you don't have to.
+            </div>
           </div>
-        </div>
+        )}
 
         <div style={{
           marginTop: "auto",

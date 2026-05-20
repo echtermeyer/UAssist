@@ -93,13 +93,23 @@ router.post('/register', async (req, res, next) => {
     }
 });
 
-router.get('/me', (req, res) => {
+router.get('/me', async (req, res) => {
     const token = req.cookies?.ua_token ||
         (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null);
     if (!token) return res.status(401).json({ error: 'Not authenticated' });
     try {
         const user = verifyToken(token);
-        res.json({ userId: user.userId, username: user.username, tenantId: user.tenantId, role: user.role });
+        const dbUser = await getGlobalDb().collection('users').findOne(
+            { username: user.username },
+            { projection: { onboarding: 1 } }
+        );
+        res.json({
+            userId: user.userId,
+            username: user.username,
+            tenantId: user.tenantId,
+            role: user.role,
+            onboarding: dbUser?.onboarding || {},
+        });
     } catch {
         res.status(401).json({ error: 'Not authenticated' });
     }

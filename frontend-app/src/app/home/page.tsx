@@ -36,7 +36,14 @@ export default function HomePage() {
     getMe().then(me => {
       if (!me) { router.replace("/onboarding"); return }
       setUser({ firstName: me.username, phone: "" })
-      setConnected(loadConnected())
+      const fromServer = new Set(
+        Object.entries(me.onboarding)
+          .filter(([, v]) => v === "connected" || v === "linked")
+          .map(([k]) => k)
+      )
+      const merged = new Set([...fromServer, ...loadConnected()])
+      saveConnected(merged)
+      setConnected(merged)
       setReady(true)
     })
   }, [router])
