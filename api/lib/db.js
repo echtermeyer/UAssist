@@ -5,7 +5,7 @@ const { encrypt } = require('./crypto');
 let client;
 
 async function connect() {
-    client = new MongoClient(process.env.MONGO_URL || 'mongodb://localhost:27017/uassist');
+    client = new MongoClient(process.env.MONGO_ADMIN_URL || process.env.MONGO_URL || 'mongodb://localhost:27017/uassist');
     await client.connect();
     console.log('✅ MongoDB ready!');
 }
