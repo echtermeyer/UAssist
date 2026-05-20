@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react"
 import QRCode from "qrcode"
-import { BrandMark, FakeQR, WordReveal, I, Logo } from "./shared"
+import { BrandMark, WordReveal, I, Logo } from "./shared"
 import {
   startWhatsAppOnboard, pollWhatsAppStatus,
   startSignalOnboard, pollSignalStatus,
@@ -197,11 +197,17 @@ export function QRStep({
               {service === "whatsapp" ? (
                 qrDataUrl
                   ? <img src={qrDataUrl} alt="WhatsApp QR code" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                  : <FakeQR seed={7} color="var(--ink-strong)" />
+                  : <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "100%", height: "100%", gap: 14, color: "var(--ink-soft)" }}>
+                      <div style={{ width: 32, height: 32, border: "3px solid var(--ink-mute)", borderTopColor: "var(--ink)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                      <span style={{ fontSize: 12.5 }}>Generating QR code…</span>
+                    </div>
               ) : (
                 linkUri
                   ? <canvas ref={canvasRef} width={260} height={260} style={{ width: "100%", height: "100%" }} />
-                  : <FakeQR seed={13} color="var(--ink-strong)" />
+                  : <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "100%", height: "100%", gap: 14, color: "var(--ink-soft)" }}>
+                      <div style={{ width: 32, height: 32, border: "3px solid var(--ink-mute)", borderTopColor: "var(--ink)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                      <span style={{ fontSize: 12.5 }}>Generating link…</span>
+                    </div>
               )}
               <div className="qr-center-logo" style={{ background: serviceColor }}>
                 <ServiceIcon size={22} />
