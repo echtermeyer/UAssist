@@ -140,9 +140,9 @@ export function BrandLogo({ size = 28, color = "var(--accent)", fg = "#f4ede0" }
   )
 }
 
-export function BrandMark({ size = "default" }: { size?: "default" | "small" }) {
+export function BrandMark({ size = "default", href }: { size?: "default" | "small"; href?: string }) {
   const sm = size === "small"
-  return (
+  const inner = (
     <span className="brand">
       <BrandLogo size={sm ? 24 : 28} />
       <span className="word" style={{ fontSize: sm ? 16 : 18 }}>
@@ -151,6 +151,11 @@ export function BrandMark({ size = "default" }: { size?: "default" | "small" }) 
       </span>
     </span>
   )
+  if (href) {
+    const Link = require("next/link").default
+    return <Link href={href} style={{ textDecoration: "none", color: "inherit" }}>{inner}</Link>
+  }
+  return inner
 }
 
 export function FakeQR({ seed = 1, color = "var(--ink-strong)" }: { seed?: number; color?: string }) {

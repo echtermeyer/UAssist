@@ -87,7 +87,6 @@ type DashboardProps = {
   loadingMessages?: boolean
   onConnect?: (service: string) => void
   onLogout?: () => void
-  onReset?: () => void
 }
 
 export function Dashboard({
@@ -97,7 +96,6 @@ export function Dashboard({
   loadingMessages,
   onConnect,
   onLogout,
-  onReset,
 }: DashboardProps) {
   const [active, setActive] = useState("all")
   const [todos, setTodos] = useState(TODOS)
@@ -132,7 +130,7 @@ export function Dashboard({
     <div className="dash-shell">
       {/* ─── Sidebar ─── */}
       <aside className="dash-side">
-        <div className="brand-row">
+        <div className="brand-row" style={{ cursor: "default" }}>
           <BrandLogo size={26} />
           <span className="brand-text">UAssist</span>
         </div>
@@ -214,15 +212,6 @@ export function Dashboard({
                 {connectedArr.length === 0 ? "none connected" : `${connectedArr.length} live`}
               </span>
             </div>
-            {onReset && (
-              <button
-                className="skip-link"
-                onClick={onReset}
-                style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 8, alignSelf: "flex-start", display: "inline-block" }}
-              >
-                Restart onboarding
-              </button>
-            )}
           </div>
         </div>
       </aside>

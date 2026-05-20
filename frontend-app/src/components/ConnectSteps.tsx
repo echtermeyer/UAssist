@@ -137,10 +137,9 @@ export function QRStep({
   return (
     <>
       <header className="topbar">
-        <BrandMark />
+        <BrandMark href="/home" />
         <div className="right">
           <span className="label-mono">Connect your services</span>
-          <button className="skip-btn" onClick={onSkip}>Skip onboarding →</button>
         </div>
       </header>
 
@@ -209,7 +208,7 @@ export function QRStep({
                       <span style={{ fontSize: 12.5 }}>Generating link…</span>
                     </div>
               )}
-              <div className="qr-center-logo" style={{ background: serviceColor }}>
+              <div className="qr-center-logo" style={{ background: serviceColor, display: (service === "whatsapp" ? !!qrDataUrl : !!linkUri) ? "flex" : "none" }}>
                 <ServiceIcon size={22} />
               </div>
 
@@ -318,10 +317,9 @@ export function EmailStep({ stepLabels, current, completed, stepLabel, onConnect
   return (
     <>
       <header className="topbar">
-        <BrandMark />
+        <BrandMark href="/home" />
         <div className="right">
           <span className="label-mono">Connect your services</span>
-          <button className="skip-btn" onClick={onSkip}>Skip onboarding →</button>
         </div>
       </header>
 

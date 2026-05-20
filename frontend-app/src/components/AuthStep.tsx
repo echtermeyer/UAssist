@@ -166,10 +166,9 @@ type AuthStepProps = {
   initialName?: string
   onAuthed: (user: AuthedUser) => void
   onBack?: () => void
-  onSkip?: () => void
 }
 
-export function AuthStep({ initialMode = "signup", initialName = "", onAuthed, onBack, onSkip }: AuthStepProps) {
+export function AuthStep({ initialMode = "signup", initialName = "", onAuthed, onBack }: AuthStepProps) {
   const [mode, setMode] = useState<"signup" | "login">(initialMode)
   const [firstName, setFirstName] = useState(initialName)
   const [countryCode, setCountryCode] = useState("+49")
@@ -218,10 +217,9 @@ export function AuthStep({ initialMode = "signup", initialName = "", onAuthed, o
   return (
     <>
       <header className="topbar">
-        <BrandMark />
+        <BrandMark href="/home" />
         <div className="right">
           <span className="label-mono">{isSignup ? "Create your account" : "Welcome back"}</span>
-          {onSkip && <button className="skip-btn" onClick={onSkip}>Skip onboarding →</button>}
         </div>
       </header>
 
