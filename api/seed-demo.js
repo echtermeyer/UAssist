@@ -18,7 +18,7 @@ const WHATSAPP = [
   { fromName: 'Family 🏡', from: '49151234568', _chat: 'Family 🏡', body: 'Mama: Sunday lunch at our place — bring something sweet?', _savedAt: ago(hours(2)) },
   { fromName: 'Family 🏡', from: '49151234568', _chat: 'Family 🏡', body: "Papa: I made the Pflaumenkuchen last time, someone else's turn 😄", _savedAt: ago(hours(1) + mins(55)) },
   { fromName: 'Tomek Z.', from: '49157654321', _chat: 'Tomek Z.', body: 'Yo — climbing at 19? Bouldering hall by the canal.', _savedAt: ago(days(1) + hours(3)) },
-  { fromName: 'Tomek Z.', from: '49157654321', _chat: 'Tomek Z.', body: 'If you're in I'll book two spots', _savedAt: ago(days(1) + hours(2) + mins(50)) },
+  { fromName: 'Tomek Z.', from: '49157654321', _chat: 'Tomek Z.', body: "If you're in I'll book two spots", _savedAt: ago(days(1) + hours(2) + mins(50)) },
   { fromName: 'Sarah K.', from: '49175111222', _chat: 'Sarah K.', body: 'The slides for Tuesday look great btw. Really well structured.', _savedAt: ago(days(2) + hours(5)) },
   { fromName: 'Sarah K.', from: '49175111222', _chat: 'Sarah K.', body: 'One thing — slide 7 has a typo in the headline, just a heads up', _savedAt: ago(days(2) + hours(4) + mins(58)) },
   { fromName: 'David Park', from: '49161999888', _chat: 'David Park', body: 'Hey, quick one — are you joining the all-hands on Friday or remote?', _savedAt: ago(days(3) + hours(9)) },
