@@ -55,14 +55,24 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`:
+Open `http://localhost:3001` and sign up. Auth uses **phone number + 4-digit PIN** (no email).
 
-1. Click **Sign up** and create a username + password
-2. In the **Integrations** panel, expand WhatsApp or Signal and click **Generate QR code**
-3. Scan with your phone — the integration is live once the QR is accepted
-4. For Email: expand and enter your IMAP credentials (use an app password for Gmail/Outlook)
-5. For Slack: enter a Bot Token and App Token
-6. Messages appear in the inbox in real time
+---
+
+## Demo account
+
+A demo user is seeded automatically on every deploy (`api/seed-demo.js`).
+
+| Field | Value |
+|---|---|
+| URL | `http://46.225.227.83:3001` |
+| Country code | `+49` |
+| Phone | `0000000000` |
+| PIN | `0000` |
+
+Or click **"Demo platform"** on the login page to sign in automatically.
+
+The demo account has pre-populated WhatsApp, Signal, and Email messages. Data is reset to the seed state on every deploy.
 
 ---
 
