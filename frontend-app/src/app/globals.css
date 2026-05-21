@@ -1720,6 +1720,7 @@ a { color: inherit; }
 /* ─── Responsive: Mobile (≤ 639px) ──────────────────────────────────────── */
 
 @media (max-width: 639px) {
+  .app-shell { height: 100dvh; min-height: 100dvh; }
   .topbar { padding: 0 16px; height: 56px; }
   .topbar .label-mono { display: none; }
 
