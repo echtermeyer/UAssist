@@ -35,7 +35,7 @@ export default function HomePage() {
   useEffect(() => {
     getMe().then(me => {
       if (!me) { router.replace("/onboarding"); return }
-      setUser({ firstName: me.username, phone: "" })
+      setUser({ firstName: me.displayName || me.username, phone: "" })
       const fromServer = new Set(
         Object.entries(me.onboarding)
           .filter(([, v]) => v === "connected" || v === "linked")

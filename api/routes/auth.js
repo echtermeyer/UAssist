@@ -101,11 +101,12 @@ router.get('/me', async (req, res) => {
         const user = verifyToken(token);
         const dbUser = await getGlobalDb().collection('users').findOne(
             { username: user.username },
-            { projection: { onboarding: 1 } }
+            { projection: { onboarding: 1, displayName: 1 } }
         );
         res.json({
             userId: user.userId,
             username: user.username,
+            displayName: dbUser?.displayName || user.username,
             tenantId: user.tenantId,
             role: user.role,
             onboarding: dbUser?.onboarding || {},

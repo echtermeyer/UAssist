@@ -85,6 +85,7 @@ async function run() {
     const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
     await globalDb.collection('users').insertOne({
       username: DEMO_USERNAME,
+      displayName: 'Demo User',
       passwordHash,
       tenantId: DEMO_TENANT,
       role: 'user',
@@ -95,7 +96,7 @@ async function run() {
   } else {
     await globalDb.collection('users').updateOne(
       { username: DEMO_USERNAME },
-      { $set: { onboarding: { whatsapp: 'connected', signal: 'linked', email: 'connected' } } }
+      { $set: { displayName: 'Demo User', onboarding: { whatsapp: 'connected', signal: 'linked', email: 'connected' } } }
     );
     console.log('✅ Demo user already exists — updated onboarding status');
   }
