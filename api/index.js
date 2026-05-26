@@ -65,6 +65,7 @@ app.use((err, req, res, next) => {
 
 connect().then(async () => {
     const { hashPassword } = require('./lib/auth');
+    const { reconcileTenantContainers } = require('./lib/docker');
     const db = getGlobalDb();
     const count = await db.collection('users').countDocuments();
     if (count === 0) {
@@ -79,6 +80,7 @@ connect().then(async () => {
         });
         console.log(`✅ Seeded admin user (password: ${adminPass})`);
     }
+    await reconcileTenantContainers();
     app.listen(3000, () => console.log('✅ API running on port 3000'));
 }).catch(err => {
     console.error('Fatal:', err.message);

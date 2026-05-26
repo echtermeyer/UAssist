@@ -1,0 +1,13 @@
+{
+  "name": "tenant-worker",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "@slack/bolt": "*",
+    "imapflow": "^1.3.3",
+    "mongodb": "^7.2.0",
+    "qrcode": "^1.5.3",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.34.7"
+  }
+}
