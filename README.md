@@ -1,4 +1,4 @@
-# UAssist
+# URAssist
 
 A unified messaging platform for WhatsApp, Signal, Email, and Slack. Messages from all channels are stored in MongoDB, scoped per tenant. A REST API provides authentication, real-time streaming, and inbound/outbound messaging. A Next.js frontend lets users sign up, onboard their own accounts, and see messages stream in live.
 
