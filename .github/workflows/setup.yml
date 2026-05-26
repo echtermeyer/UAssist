@@ -6,6 +6,9 @@ on:
 jobs:
   setup:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - uses: appleboy/ssh-action@v1.0.3
@@ -31,7 +34,7 @@ jobs:
 
             # Clone repo if not present, otherwise pull
             if [ ! -d /home/deploy/UAssist ]; then
-              git clone https://github.com/${{ github.repository }} /home/deploy/UAssist
+              git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} /home/deploy/UAssist
             else
               cd /home/deploy/UAssist && git pull origin main
             fi

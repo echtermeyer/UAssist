@@ -6,6 +6,9 @@ on:
 jobs:
   nuke:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - uses: appleboy/ssh-action@v1.0.3
@@ -14,7 +17,6 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /home/deploy/UAssist
-            docker compose down -v --remove-orphans
+            [ -d /home/deploy/UAssist ] && (cd /home/deploy/UAssist && docker compose down -v --remove-orphans) || true
             docker ps -aq --filter "name=uassist-tenant-" | xargs -r docker rm -f
             docker volume ls -q --filter "name=uassist-tenant-" | xargs -r docker volume rm
