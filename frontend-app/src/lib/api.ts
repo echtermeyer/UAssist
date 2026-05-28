@@ -80,6 +80,40 @@ export async function fetchMessages(service?: "whatsapp" | "email" | "signal" | 
   return apiFetch<RawMessage[]>(path)
 }
 
+// ── AI endpoints ─────────────────────────────────────────────────────────────
+
+export type AiTodo = {
+  text: string
+  meta: string
+}
+
+export type AiWhatMattersItem = {
+  kind: string
+  kindColor: string
+  title: string
+  context: string
+}
+
+export async function fetchAiSummary(): Promise<{ summary: string }> {
+  return apiFetch<{ summary: string }>("/ai/summary")
+}
+
+export async function fetchAiTodos(): Promise<{ todos: AiTodo[] }> {
+  return apiFetch<{ todos: AiTodo[] }>("/ai/todos")
+}
+
+export async function fetchAiTodoState(): Promise<{ done: number[] }> {
+  return apiFetch<{ done: number[] }>("/ai/todos/state")
+}
+
+export async function toggleAiTodo(index: number): Promise<{ done: number[] }> {
+  return apiFetch<{ done: number[] }>(`/ai/todos/${index}/toggle`, { method: "POST" })
+}
+
+export async function fetchAiWhatMatters(): Promise<{ items: AiWhatMattersItem[] }> {
+  return apiFetch<{ items: AiWhatMattersItem[] }>("/ai/what-matters")
+}
+
 // ── SSE stream ────────────────────────────────────────────────────────────────
 
 export function openStream(onMessage: (raw: RawMessage) => void, onError?: () => void): () => void {

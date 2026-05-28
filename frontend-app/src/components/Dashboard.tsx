@@ -1,9 +1,10 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useEffect, useCallback } from "react"
 import { BrandLogo, WordReveal, I, Logo } from "./shared"
 import { formatRelativeTime } from "@/lib/utils"
-import type { RawMessage } from "@/lib/api"
+import type { RawMessage, AiTodo, AiWhatMattersItem } from "@/lib/api"
+import { fetchAiSummary, fetchAiTodos, fetchAiTodoState, toggleAiTodo, fetchAiWhatMatters } from "@/lib/api"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,15 @@ export function Dashboard({
   const [active, setActive] = useState("all")
   const [selected, setSelected] = useState<string | null>(null)
 
+  // AI state
+  const [aiSummary, setAiSummary] = useState<string | null>(null)
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false)
+  const [aiTodos, setAiTodos] = useState<AiTodo[]>([])
+  const [aiTodoDone, setAiTodoDone] = useState<Set<number>>(new Set())
+  const [aiTodosLoading, setAiTodosLoading] = useState(false)
+  const [aiWhatMatters, setAiWhatMatters] = useState<AiWhatMattersItem[]>([])
+  const [aiWhatMattersLoading, setAiWhatMattersLoading] = useState(false)
+
   const allServices = ["whatsapp", "signal", "email"]
   const missing = allServices.filter(s => !connected.has(s))
   const connectedArr = allServices.filter(s => connected.has(s))
@@ -102,6 +112,57 @@ export function Dashboard({
 
   const hasData = visibleMessages.length > 0
   const hasConnected = connected.size > 0
+
+  // Fetch AI data when messages are available
+  useEffect(() => {
+    if (!hasData) return
+    setAiSummaryLoading(true)
+    fetchAiSummary()
+      .then(res => setAiSummary(res.summary))
+      .catch(() => setAiSummary(null))
+      .finally(() => setAiSummaryLoading(false))
+  }, [hasData])
+
+  useEffect(() => {
+    if (!hasData) return
+    setAiTodosLoading(true)
+    Promise.all([fetchAiTodos(), fetchAiTodoState()])
+      .then(([todosRes, stateRes]) => {
+        setAiTodos(todosRes.todos)
+        setAiTodoDone(new Set(stateRes.done))
+      })
+      .catch(() => {})
+      .finally(() => setAiTodosLoading(false))
+  }, [hasData])
+
+  useEffect(() => {
+    if (!hasData) return
+    setAiWhatMattersLoading(true)
+    fetchAiWhatMatters()
+      .then(res => setAiWhatMatters(res.items))
+      .catch(() => setAiWhatMatters([]))
+      .finally(() => setAiWhatMattersLoading(false))
+  }, [hasData])
+
+  const handleTodoToggle = useCallback(async (index: number) => {
+    // Optimistic update
+    setAiTodoDone(prev => {
+      const next = new Set(prev)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+    try {
+      const res = await toggleAiTodo(index)
+      setAiTodoDone(new Set(res.done))
+    } catch {}
+  }, [])
+
+  // Sort todos: undone first, done last
+  const sortedTodos = useMemo(() => {
+    return aiTodos.map((todo, i) => ({ ...todo, index: i, done: aiTodoDone.has(i) }))
+      .sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1))
+  }, [aiTodos, aiTodoDone])
 
   return (
     <div className="dash-shell">
@@ -247,32 +308,33 @@ export function Dashboard({
           <>
             <div className="section-h">
               <span className="t serif">What matters today</span>
-              <span className="a">AI digest · refreshed 2m ago</span>
+              <span className="a">AI digest · {aiWhatMattersLoading ? "refreshing..." : "refreshed just now"}</span>
             </div>
 
             <div className="digest-grid">
-              <div className="digest-card">
-                <span className="kind"><span className="k-dot" style={{ background: "var(--insight)" }} /> Tasks · 4</span>
-                <div className="title-line">
-                  <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>Oat milk</span> on the way home, and confirm a{" "}
-                  <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>Thursday review</span> with Jonas.
+              {aiWhatMattersLoading ? (
+                <div className="digest-card" style={{ opacity: 0.55, gridColumn: "1 / -1" }}>
+                  <span className="kind"><span className="k-dot" style={{ background: "var(--ink-mute)" }} /> Loading AI digest...</span>
+                  <div className="title-line" style={{ color: "var(--ink-mute)", fontSize: 15 }}>
+                    Analyzing your messages to surface what matters most...
+                  </div>
                 </div>
-                <div className="ctx"><span className="ch-dot" /> Pulled from WhatsApp, Signal</div>
-              </div>
-              <div className="digest-card">
-                <span className="kind"><span className="k-dot" style={{ background: "var(--accent)" }} /> Schedule</span>
-                <div className="title-line">
-                  School pickup moved to <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>16:30</span>. Family lunch Sunday — bring something sweet.
+              ) : aiWhatMatters.length > 0 ? (
+                aiWhatMatters.slice(0, 3).map((item, i) => (
+                  <div key={i} className="digest-card">
+                    <span className="kind"><span className="k-dot" style={{ background: `var(--${item.kindColor || "accent"})` }} /> {item.kind}</span>
+                    <div className="title-line">{item.title}</div>
+                    <div className="ctx"><span className="ch-dot" /> {item.context}</div>
+                  </div>
+                ))
+              ) : (
+                <div className="digest-card" style={{ opacity: 0.55, gridColumn: "1 / -1" }}>
+                  <span className="kind"><span className="k-dot" style={{ background: "var(--ink-mute)" }} /> AI digest</span>
+                  <div className="title-line" style={{ color: "var(--ink-mute)", fontSize: 15 }}>
+                    Nothing urgent found in today's messages. You're all caught up!
+                  </div>
                 </div>
-                <div className="ctx"><span className="ch-dot" /> WhatsApp · Lena, Mama</div>
-              </div>
-              <div className="digest-card">
-                <span className="kind"><span className="k-dot" style={{ background: "var(--email)" }} /> Heads up</span>
-                <div className="title-line">
-                  Your <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>ICE to München</span> changed to platform 7. Stripe invoice paid: €840.
-                </div>
-                <div className="ctx"><span className="ch-dot" /> Email · Deutsche Bahn, Stripe</div>
-              </div>
+              )}
             </div>
           </>
         ) : hasConnected ? (
@@ -360,39 +422,45 @@ export function Dashboard({
                 <span className="av">
                   <BrandLogo size={18} color="transparent" fg="var(--accent)" />
                 </span>
-                UAssist · 2 min ago
+                UAssist · just now
               </div>
               <div className="body">
-                You have <em>three things</em> to handle before noon: pick up oat milk for Lena, confirm the Thursday review with Jonas, and your train moved to <em>platform 7</em>.
-                <br /><br />
-                Want me to message Jonas back about 14:00?
-              </div>
-              <div className="actions">
-                <button className="a primary">Yes, reply 14:00 works</button>
-                <button className="a">Snooze 1h</button>
-                <button className="a">Not now</button>
+                {aiSummaryLoading ? (
+                  <em style={{ color: "var(--ink-mute)" }}>Summarizing your messages...</em>
+                ) : aiSummary ? (
+                  aiSummary
+                ) : (
+                  "I'm analyzing your messages. Check back shortly."
+                )}
               </div>
             </div>
 
             <div>
-              <div className="label-mono" style={{ marginBottom: 12 }}>Open todos · 3</div>
+              <div className="label-mono" style={{ marginBottom: 12 }}>
+                {aiTodosLoading ? "Loading todos..." : `Open todos · ${sortedTodos.filter(t => !t.done).length}`}
+              </div>
               <div className="todo-list">
-                {[
-                  { id: 1, text: "Pick up oat milk on the way home", meta: "From Lena · WhatsApp · today", done: false },
-                  { id: 2, text: "Confirm Thursday 14:00 review with Jonas", meta: "From Jonas · Signal · today", done: false },
-                  { id: 3, text: "Review contract draft v3", meta: "From Mira · Signal · yesterday", done: true },
-                  { id: 4, text: "RSVP family lunch Sunday", meta: "From Mama · WhatsApp · today", done: false },
-                ].map(t => (
-                  <div key={t.id} className={`todo-row ${t.done ? "done" : ""}`}>
+                {sortedTodos.map(t => (
+                  <div
+                    key={t.index}
+                    className={`todo-row ${t.done ? "done" : ""}`}
+                    onClick={() => handleTodoToggle(t.index)}
+                    style={{ cursor: "pointer" }}
+                  >
                     <span className={`check ${t.done ? "done" : ""}`}>
                       {t.done && <I.CheckSm style={{ color: "#fff", marginTop: 1 }} />}
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="t">{t.text}</div>
+                      <div className="t" style={t.done ? { textDecoration: "line-through", opacity: 0.5 } : undefined}>{t.text}</div>
                       <div className="meta">{t.meta}</div>
                     </div>
                   </div>
                 ))}
+                {!aiTodosLoading && sortedTodos.length === 0 && (
+                  <div style={{ fontSize: 13, color: "var(--ink-faint)", padding: "8px 0" }}>
+                    No to-do items extracted from today's messages.
+                  </div>
+                )}
               </div>
             </div>
           </>
