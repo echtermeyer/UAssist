@@ -92,11 +92,21 @@ export function QRStep({
             try {
               const s = await pollWhatsAppStatus()
               if (s.qr) setQrDataUrl(s.qr)
+              if (s.status === "authenticated") {
+                setStatus("linking")
+                setQrDataUrl(null)
+              }
               if (s.status === "connected") {
                 doneRef.current = true
                 clearInterval(intervalRef.current!)
                 setStatus("done")
                 setTimeout(() => onConnected(), 900)
+              }
+              if (s.status === "auth_failed") {
+                doneRef.current = true
+                clearInterval(intervalRef.current!)
+                setStatus("scanning")
+                setQrDataUrl(null)
               }
             } catch {}
           }, 2000)
@@ -184,22 +194,28 @@ export function QRStep({
                   <span className="s">Linked device · {service === "whatsapp" ? "WhatsApp Web" : "Signal Desktop"}</span>
                 </div>
               </div>
-              <div className={`qr-status ${status === "done" ? "done" : ""}`}>
+              <div className={`qr-status ${status === "done" ? "done" : ""} ${status === "linking" ? "linking" : ""}`}>
                 <span className="pulse" />
                 {status === "scanning" && "Waiting for scan"}
-                {status === "linking" && "Linking…"}
+                {status === "linking" && "Connecting..."}
                 {status === "done" && "Linked"}
               </div>
             </div>
 
             <div className="qr-canvas">
               {service === "whatsapp" ? (
-                qrDataUrl
-                  ? <img src={qrDataUrl} alt="WhatsApp QR code" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                  : <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "100%", height: "100%", gap: 14, color: "var(--ink-soft)" }}>
-                      <div style={{ width: 32, height: 32, border: "3px solid var(--ink-mute)", borderTopColor: "var(--ink)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                      <span style={{ fontSize: 12.5 }}>Generating QR code…</span>
+                status === "linking"
+                  ? <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "100%", height: "100%", gap: 14, color: "var(--ink-soft)" }}>
+                      <div style={{ width: 32, height: 32, border: "3px solid var(--ink-mute)", borderTopColor: serviceColor, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                      <span style={{ fontSize: 13, fontWeight: 500 }}>Connecting to WhatsApp...</span>
+                      <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>This can take up to 30 seconds</span>
                     </div>
+                  : qrDataUrl
+                    ? <img src={qrDataUrl} alt="WhatsApp QR code" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                    : <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "100%", height: "100%", gap: 14, color: "var(--ink-soft)" }}>
+                        <div style={{ width: 32, height: 32, border: "3px solid var(--ink-mute)", borderTopColor: "var(--ink)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                        <span style={{ fontSize: 12.5 }}>Generating QR code...</span>
+                      </div>
               ) : (
                 linkUri
                   ? <canvas ref={canvasRef} width={260} height={260} style={{ width: "100%", height: "100%" }} />
@@ -208,7 +224,7 @@ export function QRStep({
                       <span style={{ fontSize: 12.5 }}>Generating link…</span>
                     </div>
               )}
-              <div className="qr-center-logo" style={{ background: serviceColor, display: (service === "whatsapp" ? !!qrDataUrl : !!linkUri) ? "flex" : "none" }}>
+              <div className="qr-center-logo" style={{ background: serviceColor, display: (service === "whatsapp" ? (!!qrDataUrl && status === "scanning") : !!linkUri) ? "flex" : "none" }}>
                 <ServiceIcon size={22} />
               </div>
 

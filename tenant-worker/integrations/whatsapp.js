@@ -40,6 +40,30 @@ async function runWhatsapp(tenantId, tenantDb, globalDb) {
         }
     });
 
+    client.on('authenticated', async () => {
+        console.log('[whatsapp] authenticated — session saved');
+        try {
+            await onboardingCol.updateOne(
+                { service: 'whatsapp' },
+                { $set: { status: 'authenticated', qr: null, _updatedAt: new Date() } }
+            );
+        } catch (err) {
+            console.error('[whatsapp] auth-status update error:', err.message);
+        }
+    });
+
+    client.on('auth_failure', async msg => {
+        console.error('[whatsapp] auth_failure:', msg);
+        try {
+            await onboardingCol.updateOne(
+                { service: 'whatsapp' },
+                { $set: { status: 'auth_failed', qr: null, error: msg, _updatedAt: new Date() } }
+            );
+        } catch (err) {
+            console.error('[whatsapp] auth_failure status update error:', err.message);
+        }
+    });
+
     client.on('ready', async () => {
         console.log('[whatsapp] ready');
         await onboardingCol.updateOne(

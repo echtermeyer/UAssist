@@ -142,7 +142,7 @@ export async function startWhatsAppOnboard() {
   return apiFetch("/onboard/whatsapp", { method: "POST", body: JSON.stringify({}) })
 }
 
-export async function pollWhatsAppStatus(): Promise<{ status: string; qr: string | null }> {
+export async function pollWhatsAppStatus(): Promise<{ status: string; qr: string | null; error: string | null }> {
   return apiFetch("/onboard/whatsapp/status")
 }
 

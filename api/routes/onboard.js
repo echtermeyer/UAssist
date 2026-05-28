@@ -30,8 +30,8 @@ router.get('/whatsapp/status', async (req, res, next) => {
     const { tenantId } = req.user;
     try {
         const doc = await getTenantDb(tenantId).collection('onboarding').findOne({ service: 'whatsapp' });
-        if (!doc) return res.json({ status: 'idle' });
-        res.json({ status: doc.status, qr: doc.qr || null });
+        if (!doc) return res.json({ status: 'idle', qr: null, error: null });
+        res.json({ status: doc.status, qr: doc.qr || null, error: doc.error || null });
     } catch (err) {
         next(err);
     }
@@ -62,7 +62,7 @@ router.get('/signal/status', async (req, res, next) => {
     const { tenantId } = req.user;
     try {
         const doc = await getTenantDb(tenantId).collection('onboarding').findOne({ service: 'signal' });
-        if (!doc) return res.json({ status: 'idle' });
+        if (!doc) return res.json({ status: 'idle', qr: null, error: null });
         res.json({ status: doc.status, linkUri: doc.linkUri || null });
     } catch (err) {
         next(err);

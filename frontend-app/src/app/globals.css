@@ -969,6 +969,7 @@ a { color: inherit; }
   animation: heartbeat 1.6s ease-out infinite;
 }
 .qr-frame .qr-status.done .pulse { background: var(--accent); animation: none; }
+.qr-frame .qr-status.linking .pulse { background: #3b82f6; animation: heartbeat 1s ease-out infinite; }
 
 @keyframes heartbeat {
   0%   { box-shadow: 0 0 0 0 rgba(203,160,82,0.5); }
