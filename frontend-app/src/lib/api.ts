@@ -50,10 +50,10 @@ export async function login(username: string, password: string) {
   })
 }
 
-export async function signup(username: string, password: string) {
+export async function signup(username: string, password: string, firstName?: string) {
   return apiFetch<{ tenantId: string; role: string }>("/auth/signup", {
     method: "POST",
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, firstName }),
   })
 }
 
