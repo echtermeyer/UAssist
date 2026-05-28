@@ -161,3 +161,25 @@ export async function connectEmail(email: string, password: string) {
 export async function connectSlack(botToken: string, appToken: string) {
   return apiFetch("/onboard/slack", { method: "POST", body: JSON.stringify({ botToken, appToken }) })
 }
+
+// ── History Sync ─────────────────────────────────────────────────────────────
+
+export type HistorySyncServiceStatus = {
+  historySyncStatus: "idle" | "pending" | "syncing" | "done" | "error" | "unsupported"
+  historySyncCount: number
+  historySyncAt: string | null
+  historySyncError: string | null
+}
+
+export type HistorySyncStatus = Record<string, HistorySyncServiceStatus>
+
+export async function fetchHistoryStatus(): Promise<HistorySyncStatus> {
+  return apiFetch<HistorySyncStatus>("/history/status")
+}
+
+export async function triggerHistorySync(service?: "whatsapp" | "email"): Promise<{ message: string; results: Record<string, { status: string }> }> {
+  return apiFetch("/history/sync", {
+    method: "POST",
+    body: JSON.stringify(service ? { service } : {}),
+  })
+}

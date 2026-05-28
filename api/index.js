@@ -9,6 +9,7 @@ const messagesRouter = require('./routes/messages');
 const sendRouter = require('./routes/send');
 const onboardRouter = require('./routes/onboard');
 const streamRouter = require('./routes/stream');
+const historyRouter = require('./routes/history');
 
 const app = express();
 app.use(express.json());
@@ -57,6 +58,7 @@ app.use('/messages', authenticate, messagesRouter);
 app.use('/send', authenticate, sendRouter);
 app.use('/onboard', authenticate, onboardRouter);
 app.use('/stream', authenticate, streamRouter);
+app.use('/history', authenticate, historyRouter);
 
 app.use((err, req, res, next) => {
     console.error(err);

@@ -159,6 +159,7 @@ export default function HomePage() {
         loadingMessages={loadingMessages}
         onConnect={(service) => setConnectStep(service as ConnectStep)}
         onLogout={handleLogout}
+        onHistorySynced={loadMessages}
       />
     </div>
   )

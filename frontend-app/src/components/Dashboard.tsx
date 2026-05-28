@@ -1,9 +1,11 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useCallback } from "react"
 import { BrandLogo, WordReveal, I, Logo } from "./shared"
 import { formatRelativeTime } from "@/lib/utils"
 import type { RawMessage } from "@/lib/api"
+import { triggerHistorySync, fetchHistoryStatus } from "@/lib/api"
+import type { HistorySyncStatus } from "@/lib/api"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -67,6 +69,7 @@ type DashboardProps = {
   loadingMessages?: boolean
   onConnect?: (service: string) => void
   onLogout?: () => void
+  onHistorySynced?: () => void
 }
 
 export function Dashboard({
@@ -76,9 +79,26 @@ export function Dashboard({
   loadingMessages,
   onConnect,
   onLogout,
+  onHistorySynced,
 }: DashboardProps) {
   const [active, setActive] = useState("all")
   const [selected, setSelected] = useState<string | null>(null)
+  const [historySyncing, setHistorySyncing] = useState(false)
+  const [historySyncDone, setHistorySyncDone] = useState(false)
+
+  const handleSyncHistory = useCallback(async () => {
+    setHistorySyncing(true)
+    setHistorySyncDone(false)
+    try {
+      await triggerHistorySync()
+      setHistorySyncDone(true)
+      onHistorySynced?.()
+    } catch (err) {
+      console.error("History sync failed:", err)
+    } finally {
+      setHistorySyncing(false)
+    }
+  }, [onHistorySynced])
 
   const allServices = ["whatsapp", "signal", "email"]
   const missing = allServices.filter(s => !connected.has(s))
@@ -304,9 +324,39 @@ export function Dashboard({
         <div className="section-h">
           <span className="t serif">Inbox</span>
           <span className="a" style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            {hasConnected && (
+              <button
+                onClick={handleSyncHistory}
+                disabled={historySyncing}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  padding: "4px 10px",
+                  fontSize: 11.5,
+                  fontFamily: "var(--mono)",
+                  background: historySyncDone ? "var(--accent-tint)" : "var(--card-elev)",
+                  color: historySyncDone ? "var(--accent)" : "var(--ink-soft)",
+                  border: "1px solid var(--hairline-soft)",
+                  borderRadius: 6,
+                  cursor: historySyncing ? "wait" : "pointer",
+                  opacity: historySyncing ? 0.6 : 1,
+                  transition: "all 0.2s",
+                }}
+                title="Fetch message history from WhatsApp and Email"
+              >
+                {historySyncing ? (
+                  <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg> Syncing...</>
+                ) : historySyncDone ? (
+                  <>Synced</>
+                ) : (
+                  <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg> Sync History</>
+                )}
+              </button>
+            )}
             {hasData && (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <I.Search size={11} /> Search <span className="kbd">⌘K</span>
+                <I.Search size={11} /> Search <span className="kbd">&#8984;K</span>
               </span>
             )}
             <span>{hasData ? `${filtered.length} messages` : "No messages yet"}</span>

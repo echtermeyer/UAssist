@@ -68,6 +68,27 @@ async function runSignalLink(tenantId, onboardingCol) {
     });
 }
 
+/**
+ * History fetch feasibility for Signal:
+ *
+ * Signal does NOT support fetching message history through its linked-device API.
+ * When linking a new device via signal-cli, only new messages received after linking
+ * are delivered to the linked device. The Signal protocol is designed so that message
+ * history stays on the primary device for privacy/security reasons.
+ *
+ * Possible workarounds (none fully reliable for a server-side integration):
+ * - Export from Signal Desktop's local SQLite database (requires access to the user's
+ *   machine and decryption key — not viable for a server-side integration).
+ * - Use signal-cli's `receive` command immediately after linking — but this only
+ *   fetches pending/queued messages, not historical ones.
+ * - Signal's backup format could theoretically be imported, but requires the user to
+ *   manually export and upload a backup file.
+ *
+ * Conclusion: Signal history fetch is NOT feasible with the current signal-cli
+ * linked-device approach. Users are informed that only new messages after
+ * linking will appear in UAssist.
+ */
+
 async function runSignal(tenantId, tenantDb, globalDb) {
     const onboardingCol = tenantDb.collection('onboarding');
     const signalCol = tenantDb.collection('signal');
@@ -90,6 +111,13 @@ async function runSignal(tenantId, tenantDb, globalDb) {
             { $set: { 'onboarding.signal': 'linked', signalPhone: phone } }
         );
     }
+
+    // Mark Signal history as unsupported in the onboarding collection
+    await onboardingCol.updateOne(
+        { service: 'signal' },
+        { $set: { historySyncStatus: 'unsupported', _updatedAt: new Date() } },
+        { upsert: true }
+    );
 
     await syncContacts(phone, contactsCol);
 
