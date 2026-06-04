@@ -1,6 +1,5 @@
 const { Router } = require('express');
 const { getTenantDb } = require('../lib/db');
-const signal = require('../lib/signal');
 const { sendMail } = require('../lib/mailer');
 
 const router = Router();
@@ -26,10 +25,16 @@ router.post('/signal', async (req, res, next) => {
     const { to, message } = req.body;
     if (!to || !message) return res.status(400).json({ error: 'to and message are required' });
     try {
-        await signal.send(to, message);
-        res.json({ status: 'sent' });
+        const result = await getTenantDb(req.user.tenantId).collection('signal_outbox').insertOne({
+            to,
+            message,
+            status: 'pending',
+            tenantId: req.user.tenantId,
+            _createdAt: new Date(),
+        });
+        res.status(202).json({ id: result.insertedId, status: 'pending' });
     } catch (err) {
-        res.status(502).json({ error: err.message });
+        next(err);
     }
 });
 
