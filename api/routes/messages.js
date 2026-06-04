@@ -24,16 +24,38 @@ function decryptDoc(doc, service, dataKey) {
     return result;
 }
 
+async function getSentSignalMessages(db, dataKey) {
+    const docs = await db.collection('signal_outbox')
+        .find({ status: { $in: ['pending', 'sent'] } })
+        .sort({ _createdAt: -1 }).limit(100).toArray();
+    return docs.map(d => {
+        const message = d.message && isEncrypted(d.message) ? decryptWithKey(d.message, dataKey) : (d.message || '');
+        return {
+            _id: d._id,
+            _service: 'signal',
+            _savedAt: d._createdAt || d._savedAt || new Date(),
+            from: d.to,
+            message,
+            fromMe: true,
+            tenantId: d.tenantId,
+        };
+    });
+}
+
 router.get('/', async (req, res, next) => {
     const { tenantId } = req.user;
     try {
         const db = getTenantDb(tenantId);
         const dataKey = await getUserDataKey(req.user.username);
-        const results = await Promise.all(
-            SERVICES.map(s => db.collection(s).find({}).sort({ _savedAt: -1 }).limit(100).toArray()
-                .then(docs => docs.map(d => decryptDoc({ ...d, _service: s }, s, dataKey))))
-        );
-        const merged = results.flat().sort((a, b) => new Date(b._savedAt) - new Date(a._savedAt));
+        const [results, sentSignal] = await Promise.all([
+            Promise.all(
+                SERVICES.map(s => db.collection(s).find({}).sort({ _savedAt: -1 }).limit(100).toArray()
+                    .then(docs => docs.map(d => decryptDoc({ ...d, _service: s }, s, dataKey))))
+            ),
+            getSentSignalMessages(db, dataKey),
+        ]);
+        const merged = [...results.flat(), ...sentSignal]
+            .sort((a, b) => new Date(b._savedAt) - new Date(a._savedAt));
         res.json(merged);
     } catch (err) {
         next(err);
