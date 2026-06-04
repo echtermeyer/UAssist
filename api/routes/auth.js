@@ -38,7 +38,6 @@ router.post('/signup', async (req, res, next) => {
             tenantId,
             role: 'user',
             onboarding: { whatsapp: 'pending', signal: 'pending', email: 'pending' },
-            encryptedMongoUrl: tenantDbInfo?.encryptedMongoUrl || null,
             encryptedDataKey: encryptedKey,
             _createdAt: new Date(),
         });
@@ -89,7 +88,6 @@ router.post('/register', async (req, res, next) => {
             passwordHash,
             tenantId,
             role: role === 'admin' ? 'admin' : 'user',
-            encryptedMongoUrl: tenantDbInfo?.encryptedMongoUrl || null,
             encryptedDataKey: encryptedKey,
             _createdAt: new Date(),
         });

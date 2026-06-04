@@ -1,6 +1,5 @@
 const { MongoClient } = require('mongodb');
 const { randomBytes } = require('crypto');
-const { encrypt } = require('./crypto');
 
 let client;
 
@@ -52,7 +51,7 @@ async function provisionTenantDb(tenantId) {
         }
 
         const mongoUrl = `mongodb://${username}:${password}@localhost:27017/${dbName}?authSource=${dbName}`;
-        return { mongoUrl, encryptedMongoUrl: encrypt(mongoUrl) };
+        return { mongoUrl };
     } finally {
         await adminClient.close();
     }
