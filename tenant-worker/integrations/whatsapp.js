@@ -24,7 +24,21 @@ async function runWhatsapp(tenantId, tenantDb, globalDb) {
         authStrategy: new LocalAuth({ clientId: tenantId, dataPath: WA_DATA_PATH }),
         puppeteer: {
             executablePath: CHROMIUM_PATH,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-extensions',
+                '--disable-background-networking',
+                '--disable-default-apps',
+                '--disable-sync',
+                '--disable-translate',
+                '--no-first-run',
+                '--mute-audio',
+                '--disable-background-timer-throttling',
+                '--disable-renderer-backgrounding',
+            ],
         },
     });
 
