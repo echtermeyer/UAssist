@@ -44,7 +44,7 @@ const CHANNEL_COLORS = {
 function toInboxRow(msg: RawMessage): InboxRow {
   const ch = (msg._service === "slack" ? "email" : msg._service) as "whatsapp" | "signal" | "email"
   const isGroup = ch === "whatsapp" && !!(msg.from?.includes("@g.us") || msg.to?.includes("@g.us"))
-  const senderName = msg.fromName || ""
+  const senderName = msg.fromName || (msg.author ? msg.author.split("@")[0] : "")
   const name = ch === "whatsapp"
     ? (msg._chat || msg.from || "Unknown")
     : (msg.fromName || (typeof msg.from === "string" ? msg.from : undefined) || msg.envelope?.from?.[0]?.name || msg.envelope?.from?.[0]?.address || "Unknown")

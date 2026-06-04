@@ -21,6 +21,7 @@ export type RawMessage = {
   timestamp?: number
   id?: { fromMe?: boolean; _serialized?: string }
   pictureUrl?: string
+  author?: string
 }
 
 // ── Fetch helper ─────────────────────────────────────────────────────────────

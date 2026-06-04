@@ -14,6 +14,7 @@ async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
     const onboardingCol = tenantDb.collection('onboarding');
     const whatsappCol = tenantDb.collection('whatsapp');
     const outboxCol = tenantDb.collection('whatsapp_outbox');
+    const profilePicsCol = tenantDb.collection('profile_pics');
     const pictureCache = new Map();
 
     await onboardingCol.updateOne(
@@ -97,28 +98,65 @@ async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
                 }
             }
         }, 2000);
+
+        // Pre-populate profile pics for recent chats so existing messages get pictures too
+        (async () => {
+            try {
+                const chats = await client.getChats();
+                for (const chat of chats.slice(0, 50)) {
+                    await new Promise(r => setTimeout(r, 150));
+                    try {
+                        const url = await client.getProfilePicUrl(chat.id._serialized) || '';
+                        if (url) {
+                            await profilePicsCol.updateOne(
+                                { chatName: chat.name },
+                                { $set: { chatName: chat.name, url, _updatedAt: new Date() } },
+                                { upsert: true }
+                            );
+                        }
+                    } catch {}
+                }
+                console.log('[whatsapp] profile pics pre-populated');
+            } catch (err) {
+                console.error('[whatsapp] profile pic pre-population failed:', err.message);
+            }
+        })();
     });
 
     const saveMessage = async msg => {
         const chat = await msg.getChat();
         console.log(`[whatsapp] message from ${chat.name || msg.from} (${msg.type})`);
 
+        // For received messages, get the individual sender's name.
+        // Group messages have msg.author = individual sender JID; direct messages use msg.getContact().
         let fromName = '';
-        try {
-            const contact = await msg.getContact();
-            fromName = contact.pushname || contact.name || '';
-        } catch {}
-
-        const picJid = chat.id._serialized;
-        let pictureUrl = '';
-        if (pictureCache.has(picJid)) {
-            pictureUrl = pictureCache.get(picJid);
-        } else {
+        if (!msg.fromMe) {
             try {
-                pictureUrl = await client.getProfilePicUrl(picJid) || '';
+                if (msg.author) {
+                    const contact = await client.getContactById(msg.author);
+                    fromName = contact.pushname || contact.name || '';
+                } else {
+                    const contact = await msg.getContact();
+                    fromName = contact.pushname || contact.name || '';
+                }
             } catch {}
+        }
+
+        // Refresh profile pic for this chat and store in profile_pics collection.
+        // Using a separate collection (not per-message) means old messages benefit from fresh URLs.
+        const picJid = chat.id._serialized;
+        if (!pictureCache.has(picJid)) {
+            let pictureUrl = '';
+            try { pictureUrl = await client.getProfilePicUrl(picJid) || ''; } catch {}
             pictureCache.set(picJid, pictureUrl);
             setTimeout(() => pictureCache.delete(picJid), 3600000);
+            if (pictureUrl) {
+                profilePicsCol.updateOne(
+                    { chatName: chat.name },
+                    { $set: { chatName: chat.name, url: pictureUrl, _updatedAt: new Date() } },
+                    { upsert: true }
+                ).catch(() => {});
+            }
         }
 
         try {
@@ -134,7 +172,7 @@ async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
                     hasMedia: msg.hasMedia,
                     _chat: encryptWithKey(chat.name || '', dataKey),
                     fromName: encryptWithKey(fromName, dataKey),
-                    pictureUrl,
+                    author: encryptWithKey(msg.author || '', dataKey),
                     tenantId,
                     _savedAt: new Date(),
                 }},

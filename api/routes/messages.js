@@ -7,7 +7,7 @@ const router = Router();
 const SERVICES = ['whatsapp', 'signal', 'email', 'slack'];
 
 const SERVICE_FIELDS = {
-    whatsapp: ['body', 'from', 'to', '_chat', 'fromName'],
+    whatsapp: ['body', 'from', 'to', '_chat', 'fromName', 'author'],
     signal: ['message'],
     email: ['bodyText', 'bodyHtml'],
     slack: ['message'],
@@ -47,15 +47,23 @@ router.get('/', async (req, res, next) => {
     try {
         const db = getTenantDb(tenantId);
         const dataKey = await getUserDataKey(req.user.username);
-        const [results, sentSignal] = await Promise.all([
+        const [results, sentSignal, profilePics] = await Promise.all([
             Promise.all(
                 SERVICES.map(s => db.collection(s).find({}).sort({ _savedAt: -1 }).limit(100).toArray()
                     .then(docs => docs.map(d => decryptDoc({ ...d, _service: s }, s, dataKey))))
             ),
             getSentSignalMessages(db, dataKey),
+            db.collection('profile_pics').find({}).toArray(),
         ]);
-        const merged = [...results.flat(), ...sentSignal]
-            .sort((a, b) => new Date(b._savedAt) - new Date(a._savedAt));
+        const picMap = new Map(profilePics.map(p => [p.chatName, p.url]));
+        const allMessages = [...results.flat(), ...sentSignal];
+        for (const msg of allMessages) {
+            if (msg._service === 'whatsapp' && msg._chat) {
+                const url = picMap.get(msg._chat);
+                if (url) msg.pictureUrl = url;
+            }
+        }
+        const merged = allMessages.sort((a, b) => new Date(b._savedAt) - new Date(a._savedAt));
         res.json(merged);
     } catch (err) {
         next(err);
