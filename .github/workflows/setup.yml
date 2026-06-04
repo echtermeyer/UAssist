@@ -28,7 +28,7 @@ jobs:
                 https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
                 | sudo tee /etc/apt/sources.list.d/docker.list
               sudo apt-get update -y
-              sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+            sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin ipset
               sudo usermod -aG docker deploy
             fi
 
@@ -61,3 +61,5 @@ jobs:
             docker compose pull
             docker pull ghcr.io/$REPO/tenant-worker:latest
             docker compose up -d
+
+            sudo bash /home/deploy/UAssist/scripts/geoip-de.sh
