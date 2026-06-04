@@ -41,8 +41,9 @@ jobs:
 
             cd /home/deploy/UAssist
 
-            cat > .env << 'EOF'
-            GITHUB_REPOSITORY=${{ github.repository }}
+            REPO=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+            cat > .env << EOF
+            GITHUB_REPOSITORY=$REPO
             MONGO_ROOT_PASSWORD=${{ secrets.MONGO_ROOT_PASSWORD }}
             MONGO_API_PASSWORD=${{ secrets.MONGO_API_PASSWORD }}
             MONGO_URL=mongodb://uassist_api:${{ secrets.MONGO_API_PASSWORD }}@mongodb:27017/?authSource=admin
@@ -53,7 +54,7 @@ jobs:
             NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
             CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
             COOKIE_SECURE=false
-            TENANT_WORKER_IMAGE=ghcr.io/${{ github.repository }}/tenant-worker:latest
+            TENANT_WORKER_IMAGE=ghcr.io/$REPO/tenant-worker:latest
             EOF
 
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
