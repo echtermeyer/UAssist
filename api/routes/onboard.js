@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const { getGlobalDb, getTenantDb } = require('../lib/db');
-const { encrypt } = require('../lib/crypto');
+const { encryptWithKey } = require('../lib/crypto');
+const { getUserDataKey } = require('../lib/userkey');
 const { startTenantContainer, restartTenantContainer } = require('../lib/docker');
 
 const router = Router();
@@ -76,9 +77,10 @@ router.post('/email', async (req, res, next) => {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'email and password required' });
     try {
+        const dataKey = await getUserDataKey(req.user.username);
         await getGlobalDb().collection('users').updateOne(
             { tenantId },
-            { $set: { 'onboarding.email': 'connected', emailAddress: email, emailPassword: encrypt(password) } }
+            { $set: { 'onboarding.email': 'connected', emailAddress: email, emailPassword: encryptWithKey(password, dataKey) } }
         );
         await restartTenantContainer(tenantId);
         res.json({ status: 'connected' });
@@ -94,9 +96,10 @@ router.post('/slack', async (req, res, next) => {
     const { botToken, appToken } = req.body;
     if (!botToken || !appToken) return res.status(400).json({ error: 'botToken and appToken required' });
     try {
+        const dataKey = await getUserDataKey(req.user.username);
         await getGlobalDb().collection('users').updateOne(
             { tenantId },
-            { $set: { 'onboarding.slack': 'connected', slackBotToken: encrypt(botToken), slackAppToken: encrypt(appToken) } }
+            { $set: { 'onboarding.slack': 'connected', slackBotToken: encryptWithKey(botToken, dataKey), slackAppToken: encryptWithKey(appToken, dataKey) } }
         );
         await restartTenantContainer(tenantId);
         res.json({ status: 'connected' });

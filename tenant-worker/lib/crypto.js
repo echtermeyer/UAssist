@@ -3,15 +3,14 @@ const { randomBytes, createCipheriv, createDecipheriv } = require('crypto');
 const ALGORITHM = 'aes-256-gcm';
 
 function getKey() {
-    const hex = process.env.MASTER_ENCRYPTION_KEY;
-    if (!hex || hex.length !== 64) throw new Error('MASTER_ENCRYPTION_KEY must be 64 hex chars (32 bytes)');
+    const hex = process.env.USER_DATA_KEY;
+    if (!hex || hex.length !== 64) throw new Error('USER_DATA_KEY must be 64 hex chars (32 bytes)');
     return Buffer.from(hex, 'hex');
 }
 
-function encrypt(plaintext) {
-    const key = getKey();
+function encryptWithKey(plaintext, keyBuffer) {
     const iv = randomBytes(12);
-    const cipher = createCipheriv(ALGORITHM, key, iv);
+    const cipher = createCipheriv(ALGORITHM, keyBuffer, iv);
     const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
     const tag = cipher.getAuthTag();
     return JSON.stringify({
@@ -21,15 +20,22 @@ function encrypt(plaintext) {
     });
 }
 
-function decrypt(encryptedJson) {
-    const key = getKey();
+function decryptWithKey(encryptedJson, keyBuffer) {
     const { iv, ciphertext, tag } = JSON.parse(encryptedJson);
-    const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(iv, 'hex'));
+    const decipher = createDecipheriv(ALGORITHM, keyBuffer, Buffer.from(iv, 'hex'));
     decipher.setAuthTag(Buffer.from(tag, 'hex'));
     return Buffer.concat([
         decipher.update(Buffer.from(ciphertext, 'hex')),
         decipher.final(),
     ]).toString('utf8');
+}
+
+function encrypt(plaintext) {
+    return encryptWithKey(plaintext, getKey());
+}
+
+function decrypt(encryptedJson) {
+    return decryptWithKey(encryptedJson, getKey());
 }
 
 function isEncrypted(value) {
@@ -42,4 +48,4 @@ function isEncrypted(value) {
     }
 }
 
-module.exports = { encrypt, decrypt, isEncrypted };
+module.exports = { encrypt, decrypt, encryptWithKey, decryptWithKey, isEncrypted };

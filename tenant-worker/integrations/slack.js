@@ -1,6 +1,7 @@
 const { App } = require('@slack/bolt');
+const { encryptWithKey } = require('../lib/crypto');
 
-async function runSlack(botToken, appToken, tenantId, tenantDb) {
+async function runSlack(botToken, appToken, tenantId, tenantDb, dataKey) {
     const collection = tenantDb.collection('slack');
     const outbox = tenantDb.collection('slack_outbox');
     await outbox.createIndex({ _createdAt: 1 }, { expireAfterSeconds: 604800 }).catch(() => {});
@@ -13,7 +14,7 @@ async function runSlack(botToken, appToken, tenantId, tenantDb) {
             await collection.insertOne({
                 from: message.user,
                 channel: message.channel,
-                message: message.text,
+                message: encryptWithKey(message.text || '', dataKey),
                 ts: message.ts,
                 tenantId,
                 _savedAt: new Date(),

@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const { getGlobalDb, provisionTenantDb } = require('../lib/db');
 const { hashPassword, verifyPassword, signToken, verifyToken } = require('../lib/auth');
+const { generateUserDataKey } = require('../lib/kms');
 
 const router = Router();
 
@@ -28,6 +29,7 @@ router.post('/signup', async (req, res, next) => {
         const tenantId = username.toLowerCase().replace(/[^a-z0-9]/g, '_');
 
         const tenantDbInfo = await provisionTenantDb(tenantId);
+        const { encryptedKey } = await generateUserDataKey();
 
         const result = await db.collection('users').insertOne({
             username,
@@ -37,6 +39,7 @@ router.post('/signup', async (req, res, next) => {
             role: 'user',
             onboarding: { whatsapp: 'pending', signal: 'pending', email: 'pending' },
             encryptedMongoUrl: tenantDbInfo?.encryptedMongoUrl || null,
+            encryptedDataKey: encryptedKey,
             _createdAt: new Date(),
         });
         const token = signToken({ userId: result.insertedId, username, tenantId, role: 'user' });
@@ -79,6 +82,7 @@ router.post('/register', async (req, res, next) => {
         const passwordHash = await hashPassword(password);
 
         const tenantDbInfo = await provisionTenantDb(tenantId);
+        const { encryptedKey } = await generateUserDataKey();
 
         const result = await db.collection('users').insertOne({
             username,
@@ -86,6 +90,7 @@ router.post('/register', async (req, res, next) => {
             tenantId,
             role: role === 'admin' ? 'admin' : 'user',
             encryptedMongoUrl: tenantDbInfo?.encryptedMongoUrl || null,
+            encryptedDataKey: encryptedKey,
             _createdAt: new Date(),
         });
         res.status(201).json({ id: result.insertedId, username, tenantId });

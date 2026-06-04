@@ -2,11 +2,12 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const path = require('path');
 const fs = require('fs');
+const { encryptWithKey } = require('../lib/crypto');
 
 const WA_DATA_PATH = process.env.HOME || '/home/tenant';
 const CHROMIUM_PATH = process.env.CHROMIUM_PATH || '/usr/bin/google-chrome';
 
-async function runWhatsapp(tenantId, tenantDb, globalDb) {
+async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
     const lockFile = path.join(WA_DATA_PATH, `session-${tenantId}`, 'SingletonLock');
     try { fs.unlinkSync(lockFile); } catch {}
 
@@ -82,7 +83,13 @@ async function runWhatsapp(tenantId, tenantDb, globalDb) {
     client.on('message', async msg => {
         const chat = await msg.getChat();
         try {
-            await whatsappCol.insertOne({ ...msg, _chat: chat.name, tenantId, _savedAt: new Date() });
+            await whatsappCol.insertOne({
+                ...msg,
+                body: encryptWithKey(msg.body || '', dataKey),
+                _chat: chat.name,
+                tenantId,
+                _savedAt: new Date(),
+            });
         } catch (err) {
             console.error('[whatsapp] Failed to save:', err.message);
         }

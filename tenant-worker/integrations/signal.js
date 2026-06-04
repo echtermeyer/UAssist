@@ -1,6 +1,7 @@
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { encryptWithKey } = require('../lib/crypto');
 
 const SIGNAL_CLI = process.env.SIGNAL_CLI_PATH || '/usr/local/bin/signal-cli';
 const HOME = process.env.HOME || '/home/tenant';
@@ -68,7 +69,7 @@ async function runSignalLink(tenantId, onboardingCol) {
     });
 }
 
-async function runSignal(tenantId, tenantDb, globalDb) {
+async function runSignal(tenantId, tenantDb, globalDb, dataKey) {
     const onboardingCol = tenantDb.collection('onboarding');
     const signalCol = tenantDb.collection('signal');
     const contactsCol = tenantDb.collection('signal_contacts');
@@ -116,7 +117,7 @@ async function runSignal(tenantId, tenantDb, globalDb) {
                         signalCol.insertOne({
                             from,
                             fromName: contact?.name || from,
-                            message: msg.message,
+                            message: encryptWithKey(msg.message, dataKey),
                             timestamp: msg.timestamp,
                             tenantId,
                             _savedAt: new Date(),

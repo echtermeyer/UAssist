@@ -1,4 +1,5 @@
 const Docker = require('dockerode');
+const { decryptUserDataKey } = require('./kms');
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 const DOCKER_NETWORK = process.env.DOCKER_NETWORK || 'uassist';
@@ -27,6 +28,18 @@ async function startTenantContainer(tenantId) {
         return;
     }
 
+    const { getGlobalDb } = require('./db');
+    const user = await getGlobalDb().collection('users').findOne(
+        { tenantId },
+        { projection: { encryptedDataKey: 1 } }
+    );
+    if (!user?.encryptedDataKey) {
+        console.warn(`No encryptedDataKey for tenant ${tenantId} — skipping container start`);
+        return;
+    }
+    const dataKey = await decryptUserDataKey(user.encryptedDataKey);
+    const dataKeyHex = dataKey.toString('hex');
+
     const name = containerName(tenantId);
     const vol = volumeName(tenantId);
     await ensureVolume(vol);
@@ -47,7 +60,7 @@ async function startTenantContainer(tenantId) {
         Env: [
             `TENANT_ID=${tenantId}`,
             `MONGO_URL=${process.env.MONGO_URL}`,
-            `MASTER_ENCRYPTION_KEY=${process.env.MASTER_ENCRYPTION_KEY}`,
+            `USER_DATA_KEY=${dataKeyHex}`,
         ],
         HostConfig: {
             Binds: [`${vol}:/home/tenant`],

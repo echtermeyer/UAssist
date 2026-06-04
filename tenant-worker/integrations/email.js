@@ -1,4 +1,5 @@
 const { ImapFlow } = require('imapflow');
+const { encryptWithKey } = require('../lib/crypto');
 
 const IMAP_HOSTS = {
     'gmail.com': 'imap.gmail.com',
@@ -16,7 +17,7 @@ function resolveHost(email) {
     return IMAP_HOSTS[domain] ?? `imap.${domain}`;
 }
 
-async function runEmail(emailAddress, emailPassword, tenantId, tenantDb) {
+async function runEmail(emailAddress, emailPassword, tenantId, tenantDb, dataKey) {
     const collection = tenantDb.collection('email');
     const host = resolveHost(emailAddress);
 
@@ -42,8 +43,8 @@ async function runEmail(emailAddress, emailPassword, tenantId, tenantDb) {
         try {
             await collection.insertOne({
                 ...JSON.parse(JSON.stringify(msg)),
-                bodyText: msg.bodyParts?.get('1')?.toString('utf-8')?.trim() || null,
-                bodyHtml: msg.bodyParts?.get('2')?.toString('utf-8')?.trim() || null,
+                bodyText: encryptWithKey(msg.bodyParts?.get('1')?.toString('utf-8')?.trim() || '', dataKey),
+                bodyHtml: encryptWithKey(msg.bodyParts?.get('2')?.toString('utf-8')?.trim() || '', dataKey),
                 _account: emailAddress,
                 tenantId,
                 _savedAt: new Date(),

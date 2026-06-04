@@ -71,6 +71,14 @@ jobs:
           script: |
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             cd /home/deploy/UAssist
+
+            # Inject secrets into .env
+            sed -i '/^AWS_/d' .env
+            echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
+            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+            echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
+            echo "AWS_KMS_KEY_ID=${{ secrets.AWS_KMS_KEY_ID }}" >> .env
+
             REPO=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
             docker compose pull
             docker pull ghcr.io/$REPO/tenant-worker:latest

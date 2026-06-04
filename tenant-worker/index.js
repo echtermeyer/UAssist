@@ -1,5 +1,5 @@
 const { MongoClient } = require('mongodb');
-const { decrypt, isEncrypted } = require('./lib/crypto');
+const { decrypt, isEncrypted, getKey } = require('./lib/crypto');
 const { runWhatsapp } = require('./integrations/whatsapp');
 const { runSignal } = require('./integrations/signal');
 const { runEmail } = require('./integrations/email');
@@ -34,19 +34,21 @@ async function main() {
         process.exit(1);
     }
 
+    const dataKey = Buffer.from(process.env.USER_DATA_KEY, 'hex');
+
     console.log(`[tenant-worker] Starting for tenant: ${TENANT_ID}`);
 
     const runners = [];
 
     runners.push(
-        runWhatsapp(TENANT_ID, tenantDb, globalDb).catch(err => {
+        runWhatsapp(TENANT_ID, tenantDb, globalDb, dataKey).catch(err => {
             console.error('[whatsapp] crashed:', err.message);
         })
     );
 
     if (user.onboarding?.signal) {
         runners.push(
-            runSignal(TENANT_ID, tenantDb, globalDb).catch(err => {
+            runSignal(TENANT_ID, tenantDb, globalDb, dataKey).catch(err => {
                 console.error('[signal] crashed:', err.message);
             })
         );
@@ -57,7 +59,7 @@ async function main() {
             ? decrypt(user.emailPassword)
             : user.emailPassword;
         runners.push(
-            runEmail(user.emailAddress, emailPassword, TENANT_ID, tenantDb).catch(err => {
+            runEmail(user.emailAddress, emailPassword, TENANT_ID, tenantDb, dataKey).catch(err => {
                 console.error('[email] crashed:', err.message);
             })
         );
@@ -67,7 +69,7 @@ async function main() {
         const botToken = isEncrypted(user.slackBotToken) ? decrypt(user.slackBotToken) : user.slackBotToken;
         const appToken = isEncrypted(user.slackAppToken) ? decrypt(user.slackAppToken) : user.slackAppToken;
         runners.push(
-            runSlack(botToken, appToken, TENANT_ID, tenantDb).catch(err => {
+            runSlack(botToken, appToken, TENANT_ID, tenantDb, dataKey).catch(err => {
                 console.error('[slack] crashed:', err.message);
             })
         );
