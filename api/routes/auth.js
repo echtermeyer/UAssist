@@ -17,7 +17,7 @@ function setAuthCookie(res, token) {
 }
 
 router.post('/signup', async (req, res, next) => {
-    const { username, password } = req.body;
+    const { username, password, firstName } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'username and password required' });
     if (password.length < 6) return res.status(400).json({ error: 'password must be at least 6 characters' });
     try {
@@ -32,6 +32,7 @@ router.post('/signup', async (req, res, next) => {
         const result = await db.collection('users').insertOne({
             username,
             passwordHash,
+            displayName: firstName || username,
             tenantId,
             role: 'user',
             onboarding: { whatsapp: 'pending', signal: 'pending', email: 'pending' },
