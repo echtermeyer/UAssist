@@ -20,3 +20,6 @@ jobs:
             [ -d /home/deploy/UAssist ] && (cd /home/deploy/UAssist && docker compose down -v --remove-orphans) || true
             docker ps -aq --filter "name=uassist-tenant-" | xargs -r docker rm -f
             docker volume ls -q --filter "name=uassist-tenant-" | xargs -r docker volume rm
+            pm2 delete all 2>/dev/null || true
+            fuser -k 3000/tcp 2>/dev/null || true
+            fuser -k 3001/tcp 2>/dev/null || true
