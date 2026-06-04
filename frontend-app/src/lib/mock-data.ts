@@ -77,7 +77,7 @@ export function normalizeMessage(raw: RawMessage): Message {
   }
 
   if (service === "whatsapp") {
-    const chat = raw._chat || "Unknown"
+    const chat = raw._chat || raw.from?.replace(/@\S+/, "") || "Unknown"
     const text = raw.body || ""
     return {
       id,

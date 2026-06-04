@@ -9,7 +9,7 @@ const SERVICES = ['whatsapp', 'signal', 'email'];
 const POLL_MS = 2000;
 
 const SERVICE_FIELDS = {
-    whatsapp: ['body'],
+    whatsapp: ['body', 'from', 'to', '_chat'],
     signal: ['message'],
     email: ['bodyText', 'bodyHtml'],
 };
