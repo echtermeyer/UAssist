@@ -38,7 +38,7 @@ function isEncrypted(value) {
     if (typeof value !== 'string') return false;
     try {
         const parsed = JSON.parse(value);
-        return !!(parsed.iv && parsed.ciphertext && parsed.tag);
+        return !!(parsed.iv && typeof parsed.ciphertext === 'string' && parsed.tag);
     } catch {
         return false;
     }

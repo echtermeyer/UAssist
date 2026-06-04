@@ -151,6 +151,9 @@ async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
     });
 
     const saveMessage = async msg => {
+        const SKIP_TYPES = ['e2e_notification', 'notification_template', 'call_log', 'protocol', 'revoked'];
+        if (SKIP_TYPES.includes(msg.type)) return;
+
         const chat = await msg.getChat();
         console.log(`[whatsapp] message from ${chat.name || msg.from} (${msg.type})`);
 
