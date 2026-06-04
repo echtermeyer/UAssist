@@ -4,100 +4,18 @@ import React, { useState, useRef, useEffect } from "react"
 import { BrandMark, BrandLogo, WordReveal, I } from "./shared"
 import { login, signup } from "@/lib/api"
 
-type PinInputProps = {
-  value: string
-  onChange: (v: string) => void
-  autoFocus?: boolean
-}
-
-function PinInput({ value, onChange, autoFocus = false }: PinInputProps) {
-  const ref0 = useRef<HTMLInputElement>(null)
-  const ref1 = useRef<HTMLInputElement>(null)
-  const ref2 = useRef<HTMLInputElement>(null)
-  const ref3 = useRef<HTMLInputElement>(null)
-  const refs = [ref0, ref1, ref2, ref3]
-
-  const digits = (value || "").padEnd(4, " ").split("")
-
-  useEffect(() => {
-    if (autoFocus) refs[0].current?.focus()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoFocus])
-
-  const setDigit = (i: number, d: string) => {
-    const next = value.padEnd(4, " ").split("")
-    next[i] = d
-    onChange(next.join("").trim())
-  }
-
-  const handleInput = (i: number, e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value.replace(/\D/g, "").slice(-1)
-    if (v) {
-      setDigit(i, v)
-      if (i < 3) refs[i + 1].current?.focus()
-    }
-  }
-
-  const handleKey = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Backspace") {
-      e.preventDefault()
-      if (digits[i] !== " ") {
-        setDigit(i, "")
-      } else if (i > 0) {
-        refs[i - 1].current?.focus()
-        const next = value.padEnd(4, " ").split("")
-        next[i - 1] = ""
-        onChange(next.join("").trim())
-      }
-    } else if (e.key === "ArrowLeft" && i > 0) {
-      refs[i - 1].current?.focus()
-    } else if (e.key === "ArrowRight" && i < 3) {
-      refs[i + 1].current?.focus()
-    }
-  }
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const text = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4)
-    if (text) {
-      e.preventDefault()
-      onChange(text)
-      refs[Math.min(text.length, 3)].current?.focus()
-    }
-  }
-
-  return (
-    <div className="pin-input" onPaste={handlePaste}>
-      {[0, 1, 2, 3].map(i => (
-        <input
-          key={i}
-          ref={refs[i]}
-          type="text"
-          inputMode="numeric"
-          maxLength={1}
-          value={digits[i] === " " ? "" : digits[i]}
-          onChange={(e) => handleInput(i, e)}
-          onKeyDown={(e) => handleKey(i, e)}
-          onFocus={(e) => e.target.select()}
-          className={digits[i] !== " " ? "filled" : ""}
-          aria-label={`PIN digit ${i + 1}`}
-        />
-      ))}
-    </div>
-  )
-}
-
 const COUNTRY_CODES = [
-  { code: "+49", country: "Germany", flag: "🇩🇪" },
-  { code: "+44", country: "United Kingdom", flag: "🇬🇧" },
-  { code: "+1",  country: "United States", flag: "🇺🇸" },
-  { code: "+33", country: "France", flag: "🇫🇷" },
-  { code: "+34", country: "Spain", flag: "🇪🇸" },
-  { code: "+39", country: "Italy", flag: "🇮🇹" },
-  { code: "+31", country: "Netherlands", flag: "🇳🇱" },
-  { code: "+41", country: "Switzerland", flag: "🇨🇭" },
-  { code: "+43", country: "Austria", flag: "🇦🇹" },
-  { code: "+45", country: "Denmark", flag: "🇩🇰" },
-  { code: "+46", country: "Sweden", flag: "🇸🇪" },
+  { code: "+49", country: "Germany", flag: "\u{1F1E9}\u{1F1EA}" },
+  { code: "+44", country: "United Kingdom", flag: "\u{1F1EC}\u{1F1E7}" },
+  { code: "+1",  country: "United States", flag: "\u{1F1FA}\u{1F1F8}" },
+  { code: "+33", country: "France", flag: "\u{1F1EB}\u{1F1F7}" },
+  { code: "+34", country: "Spain", flag: "\u{1F1EA}\u{1F1F8}" },
+  { code: "+39", country: "Italy", flag: "\u{1F1EE}\u{1F1F9}" },
+  { code: "+31", country: "Netherlands", flag: "\u{1F1F3}\u{1F1F1}" },
+  { code: "+41", country: "Switzerland", flag: "\u{1F1E8}\u{1F1ED}" },
+  { code: "+43", country: "Austria", flag: "\u{1F1E6}\u{1F1F9}" },
+  { code: "+45", country: "Denmark", flag: "\u{1F1E9}\u{1F1F0}" },
+  { code: "+46", country: "Sweden", flag: "\u{1F1F8}\u{1F1EA}" },
 ]
 
 type PhoneInputProps = {
@@ -173,37 +91,39 @@ export function AuthStep({ initialMode = "signup", initialName = "", onAuthed, o
   const [firstName, setFirstName] = useState(initialName)
   const [countryCode, setCountryCode] = useState("+49")
   const [phone, setPhone] = useState("")
-  const [pin, setPin] = useState("")
-  const [pinConfirm, setPinConfirm] = useState("")
-  const [stage, setStage] = useState<"form" | "pin-confirm" | "verifying">("form")
+  const [password, setPassword] = useState("")
+  const [passwordConfirm, setPasswordConfirm] = useState("")
+  const [stage, setStage] = useState<"form" | "verifying">("form")
   const [error, setError] = useState("")
 
   const isSignup = mode === "signup"
 
-  const canSubmitForm = isSignup
-    ? firstName.trim().length > 0 && phone.replace(/\s/g, "").length >= 6 && pin.length === 4
-    : phone.replace(/\s/g, "").length >= 6 && pin.length === 4
+  const canSubmit = isSignup
+    ? firstName.trim().length > 0 && phone.replace(/\s/g, "").length >= 6 && password.length >= 6 && password === passwordConfirm
+    : phone.replace(/\s/g, "").length >= 6 && password.length >= 6
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault()
     setError("")
 
-    if (isSignup && stage === "form") {
-      setStage("pin-confirm")
+    if (isSignup && password !== passwordConfirm) {
+      setError("Passwords don't match. Try again.")
       return
     }
-    if (isSignup && stage === "pin-confirm") {
-      if (pinConfirm !== pin) {
-        setError("PINs don't match. Try again.")
-        return
-      }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.")
+      return
     }
 
     setStage("verifying")
     const username = (countryCode + phone).replace(/\s/g, "")
-    const password = pin + pin.slice(0, 2)
     try {
-      await (isSignup ? signup : login)(username, password)
+      if (isSignup) {
+        await signup(username, password, firstName.trim())
+      } else {
+        await login(username, password)
+      }
       onAuthed({
         firstName: isSignup ? firstName.trim() || "User" : "User",
         phone: `${countryCode} ${phone}`,
@@ -243,13 +163,13 @@ export function AuthStep({ initialMode = "signup", initialName = "", onAuthed, o
           </h1>
           <p className="connect-lede">
             {isSignup
-              ? "Just a first name and your phone number — we'll use it to keep your account portable and recoverable. Pick a 4-digit PIN to keep things simple."
-              : "Sign in with the phone number you registered. We'll never ask for a password longer than 4 digits."}
+              ? "Just a first name, your phone number, and a password to keep your account secure."
+              : "Sign in with the phone number you registered and your password."}
           </p>
 
           <ul className="benefit-list fade-stagger">
             <li><span className="b-mark"><I.CheckSm /></span><span>Phone number is your account — no email required</span></li>
-            <li><span className="b-mark"><I.CheckSm /></span><span>4-digit PIN unlocks the app; biometrics on mobile</span></li>
+            <li><span className="b-mark"><I.CheckSm /></span><span>Secure password keeps your data protected</span></li>
             <li><span className="b-mark"><I.CheckSm /></span><span>Your data lives in your private EU-hosted tenant</span></li>
           </ul>
 
@@ -261,7 +181,7 @@ export function AuthStep({ initialMode = "signup", initialName = "", onAuthed, o
             )}
             <button
               className="skip-link"
-              onClick={() => { setMode(isSignup ? "login" : "signup"); setStage("form"); setError(""); setPinConfirm("") }}
+              onClick={() => { setMode(isSignup ? "login" : "signup"); setStage("form"); setError(""); setPassword(""); setPasswordConfirm("") }}
             >
               {isSignup ? "I already have an account — log in" : "New here? Create an account"}
             </button>
@@ -274,61 +194,59 @@ export function AuthStep({ initialMode = "signup", initialName = "", onAuthed, o
               <BrandLogo size={32} />
               <div>
                 <div className="ac-title">{isSignup ? "Create account" : "Log in"}</div>
-                <div className="ac-sub">{isSignup ? "Step " + (stage === "pin-confirm" ? "2" : "1") + " of 2" : "Phone & PIN"}</div>
+                <div className="ac-sub">{isSignup ? "Phone & password" : "Phone & password"}</div>
               </div>
             </div>
 
             <div className="auth-card-body">
-              {stage !== "pin-confirm" && (
-                <>
-                  {isSignup && (
-                    <div className="field">
-                      <label>First name</label>
-                      <input
-                        type="text"
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        placeholder="Mark"
-                        autoComplete="given-name"
-                        autoFocus
-                      />
-                    </div>
-                  )}
-
-                  <div className="field">
-                    <label>Phone number</label>
-                    <PhoneInput
-                      countryCode={countryCode}
-                      setCountryCode={setCountryCode}
-                      phone={phone}
-                      setPhone={setPhone}
-                    />
-                  </div>
-
-                  <div className="field">
-                    <label>{isSignup ? "Set a 4-digit PIN" : "Enter your PIN"}</label>
-                    <PinInput value={pin} onChange={setPin} />
-                    {isSignup && <span className="field-hint">You'll use this PIN to sign back in.</span>}
-                  </div>
-                </>
+              {isSignup && (
+                <div className="field">
+                  <label>First name</label>
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="Mark"
+                    autoComplete="given-name"
+                    autoFocus
+                  />
+                </div>
               )}
 
-              {stage === "pin-confirm" && (
-                <div className="fade-enter">
-                  <div className="confirm-prompt">
-                    Confirm your PIN <span style={{ color: "var(--accent)" }}>·</span> just to be sure.
-                  </div>
-                  <div className="field" style={{ marginTop: 22 }}>
-                    <PinInput value={pinConfirm} onChange={setPinConfirm} autoFocus />
-                  </div>
-                  <button
-                    type="button"
-                    className="skip-link"
-                    onClick={() => { setStage("form"); setPinConfirm(""); setError("") }}
-                    style={{ marginTop: 14, display: "inline-block" }}
-                  >
-                    ← Edit details
-                  </button>
+              <div className="field">
+                <label>Phone number</label>
+                <PhoneInput
+                  countryCode={countryCode}
+                  setCountryCode={setCountryCode}
+                  phone={phone}
+                  setPhone={setPhone}
+                />
+              </div>
+
+              <div className="field">
+                <label>{isSignup ? "Create a password" : "Password"}</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={isSignup ? "At least 6 characters" : "Enter your password"}
+                  autoComplete={isSignup ? "new-password" : "current-password"}
+                  minLength={6}
+                />
+                {isSignup && <span className="field-hint">Must be at least 6 characters.</span>}
+              </div>
+
+              {isSignup && (
+                <div className="field">
+                  <label>Confirm password</label>
+                  <input
+                    type="password"
+                    value={passwordConfirm}
+                    onChange={(e) => setPasswordConfirm(e.target.value)}
+                    placeholder="Re-enter your password"
+                    autoComplete="new-password"
+                    minLength={6}
+                  />
                 </div>
               )}
 
@@ -337,19 +255,13 @@ export function AuthStep({ initialMode = "signup", initialName = "", onAuthed, o
               <button
                 type="submit"
                 className="btn btn-accent"
-                disabled={
-                  stage === "verifying"
-                  || (stage === "form" && !canSubmitForm)
-                  || (stage === "pin-confirm" && pinConfirm.length !== 4)
-                }
+                disabled={stage === "verifying" || !canSubmit}
                 style={{ width: "100%", marginTop: 4 }}
               >
                 {stage === "verifying" ? (
                   <span className="auth-verifying"><span className="spinner" /> Setting up your tenant…</span>
-                ) : stage === "pin-confirm" ? (
-                  <>Confirm & continue <I.Arrow /></>
                 ) : isSignup ? (
-                  <>Continue <I.Arrow /></>
+                  <>Create account <I.Arrow /></>
                 ) : (
                   <>Log in <I.Arrow /></>
                 )}
@@ -367,9 +279,7 @@ export function AuthStep({ initialMode = "signup", initialName = "", onAuthed, o
       <footer className="carousel-foot">
         <span className="label-mono">{isSignup ? "Account · Identity" : "Sign in"}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <span className="label-mono" style={{ opacity: 0.7 }}>
-            {isSignup ? (stage === "pin-confirm" ? "02 / 02" : "01 / 02") : ""}
-          </span>
+          <span className="label-mono" style={{ opacity: 0.7 }}></span>
         </div>
       </footer>
     </>
