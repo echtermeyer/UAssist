@@ -14,9 +14,12 @@ export type RawMessage = {
   body?: string
   _chat?: string
   from?: string
+  to?: string
   message?: string
   fromName?: string
+  fromMe?: boolean
   timestamp?: number
+  id?: { fromMe?: boolean; _serialized?: string }
 }
 
 // ── Fetch helper ─────────────────────────────────────────────────────────────

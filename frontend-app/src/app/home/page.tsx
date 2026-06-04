@@ -26,6 +26,7 @@ export default function HomePage() {
   const router = useRouter()
   const [ready, setReady] = useState(false)
   const [user, setUser] = useState<AuthedUser | null>(null)
+  const [isDemo, setIsDemo] = useState(false)
   const [connected, setConnected] = useState<Set<string>>(new Set())
   const [messages, setMessages] = useState<RawMessage[]>([])
   const [loadingMessages, setLoadingMessages] = useState(false)
@@ -36,6 +37,7 @@ export default function HomePage() {
     getMe().then(me => {
       if (!me) { router.replace("/onboarding"); return }
       setUser({ firstName: me.displayName || me.username, phone: "" })
+      setIsDemo(/^\+\d{1,3}0+$/.test(me.username))
       const fromServer = new Set(
         Object.entries(me.onboarding)
           .filter(([, v]) => v === "connected" || v === "linked")
@@ -157,6 +159,7 @@ export default function HomePage() {
         connected={connected}
         messages={messages}
         loadingMessages={loadingMessages}
+        isDemo={isDemo}
         onConnect={(service) => setConnectStep(service as ConnectStep)}
         onLogout={handleLogout}
       />

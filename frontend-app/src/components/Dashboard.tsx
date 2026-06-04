@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useRef, useEffect } from "react"
 import { BrandLogo, WordReveal, I, Logo } from "./shared"
 import { formatRelativeTime } from "@/lib/utils"
 import type { RawMessage } from "@/lib/api"
@@ -11,11 +11,23 @@ type InboxRow = {
   id: string
   ch: "whatsapp" | "signal" | "email"
   name: string
+  conversationKey: string
   preview: string
   time: string
-  unread: boolean
+  timestamp: number
+  fromMe: boolean
   initial: string
   color: string
+}
+
+type Conversation = {
+  key: string
+  ch: "whatsapp" | "signal" | "email"
+  name: string
+  color: string
+  initial: string
+  messages: InboxRow[]
+  lastMessage: InboxRow
 }
 
 const CHANNEL_COLORS = {
@@ -27,24 +39,64 @@ const CHANNEL_COLORS = {
 function toInboxRow(msg: RawMessage): InboxRow {
   const ch = (msg._service === "slack" ? "email" : msg._service) as "whatsapp" | "signal" | "email"
   const name = msg.fromName
+    || (msg._service === "whatsapp" ? msg._chat : undefined)
     || (typeof msg.from === "string" ? msg.from : undefined)
     || msg.envelope?.from?.[0]?.name
     || msg.envelope?.from?.[0]?.address
     || "Unknown"
   const preview = msg.bodyText || msg.body || msg.message || msg.envelope?.subject || ""
+  const fromMe = !!(msg.fromMe || msg.id?.fromMe)
+  const ts = msg.timestamp
+    ? msg.timestamp > 1e10 ? msg.timestamp : msg.timestamp * 1000
+    : new Date(msg._savedAt).getTime()
+  const conversationKey = ch === "whatsapp"
+    ? (msg._chat || msg.from || msg._id)
+    : ch === "signal"
+    ? (msg.from || msg._id)
+    : msg._id
   return {
     id: msg._id,
     ch,
     name,
-    preview: preview.slice(0, 120),
+    conversationKey: String(conversationKey),
+    preview: preview.slice(0, 200),
     time: formatRelativeTime(msg._savedAt),
-    unread: true,
+    timestamp: ts,
+    fromMe,
     initial: name.charAt(0).toUpperCase(),
     color: CHANNEL_COLORS[ch] || "#8c5a1d",
   }
 }
 
-// ─── Seed data ────────────────────────────────────────────────────────────────
+function groupConversations(rows: InboxRow[]): Conversation[] {
+  const map = new Map<string, Conversation>()
+  for (const row of rows) {
+    if (!map.has(row.conversationKey)) {
+      map.set(row.conversationKey, {
+        key: row.conversationKey,
+        ch: row.ch,
+        name: row.name,
+        color: row.color,
+        initial: row.initial,
+        messages: [],
+        lastMessage: row,
+      })
+    }
+    const conv = map.get(row.conversationKey)!
+    conv.messages.push(row)
+    if (row.timestamp > conv.lastMessage.timestamp) conv.lastMessage = row
+    if (!row.fromMe && row.name !== "Unknown") {
+      conv.name = row.name
+      conv.initial = row.name.charAt(0).toUpperCase()
+    }
+  }
+  for (const conv of map.values()) {
+    conv.messages.sort((a, b) => a.timestamp - b.timestamp)
+  }
+  return Array.from(map.values()).sort((a, b) => b.lastMessage.timestamp - a.lastMessage.timestamp)
+}
+
+// ─── Channel meta ─────────────────────────────────────────────────────────────
 
 const CHANNEL_META = {
   all: { label: "Everything", color: "var(--ink)" },
@@ -58,6 +110,62 @@ function ChannelTag({ ch }: { ch: string }) {
   return <span className="ch-tag" style={{ color: meta.color }}>{meta.label}</span>
 }
 
+// ─── Conversation Detail ───────────────────────────────────────────────────────
+
+function ConversationDetail({ conv, onClose }: { conv: Conversation; onClose: () => void }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+  }, [conv.key])
+
+  return (
+    <div className="conv-detail fade-enter">
+      <div className="conv-detail-header">
+        <button className="conv-back-btn" onClick={onClose}>
+          <I.ArrowLeft size={14} />
+          <span>Back</span>
+        </button>
+        <div className="conv-header-info">
+          <div className="conv-header-av" style={{ background: conv.color }}>{conv.initial}</div>
+          <div className="conv-header-text">
+            <span className="conv-header-name">{conv.name}</span>
+            <ChannelTag ch={conv.ch} />
+          </div>
+        </div>
+        <span className="conv-count">{conv.messages.length} messages</span>
+      </div>
+
+      <div className="conv-messages" ref={scrollRef}>
+        {conv.messages.map((msg, i) => {
+          const prevMsg = i > 0 ? conv.messages[i - 1] : null
+          const showDate = !prevMsg || new Date(msg.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString()
+          return (
+            <React.Fragment key={msg.id}>
+              {showDate && (
+                <div className="conv-date-divider">
+                  <span>{new Date(msg.timestamp).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}</span>
+                </div>
+              )}
+              <div className={`msg-row ${msg.fromMe ? "msg-sent" : "msg-recv"}`}>
+                {!msg.fromMe && (
+                  <div className="msg-av" style={{ background: conv.color }}>{conv.initial}</div>
+                )}
+                <div className="msg-bubble" style={msg.fromMe ? { background: "var(--ink)", color: "var(--paper)" } : { background: "var(--card-elev)" }}>
+                  <div className="msg-text">{msg.preview}</div>
+                  <div className="msg-time" style={msg.fromMe ? { color: "rgba(246,241,231,0.55)" } : undefined}>{msg.time}</div>
+                </div>
+                {msg.fromMe && (
+                  <div className="msg-av msg-av-me">Me</div>
+                )}
+              </div>
+            </React.Fragment>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 type DashboardProps = {
@@ -65,6 +173,7 @@ type DashboardProps = {
   connected?: Set<string>
   messages?: RawMessage[]
   loadingMessages?: boolean
+  isDemo?: boolean
   onConnect?: (service: string) => void
   onLogout?: () => void
 }
@@ -74,11 +183,13 @@ export function Dashboard({
   connected = new Set(),
   messages,
   loadingMessages,
+  isDemo = false,
   onConnect,
   onLogout,
 }: DashboardProps) {
   const [active, setActive] = useState("all")
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selectedConvKey, setSelectedConvKey] = useState<string | null>(null)
+  const [readConvKeys, setReadConvKeys] = useState<Set<string>>(new Set())
 
   const allServices = ["whatsapp", "signal", "email"]
   const missing = allServices.filter(s => !connected.has(s))
@@ -91,17 +202,35 @@ export function Dashboard({
 
   const inboxRows: InboxRow[] = useMemo(() => (messages ?? []).map(toInboxRow), [messages])
 
-  const visibleMessages = useMemo(() => {
-    return inboxRows.filter(m => connected.has(m.ch))
-  }, [inboxRows, connected])
+  const visibleRows = useMemo(
+    () => inboxRows.filter(m => connected.has(m.ch)),
+    [inboxRows, connected]
+  )
 
-  const filtered = useMemo(() => {
-    if (active === "all") return visibleMessages
-    return visibleMessages.filter(m => m.ch === active)
-  }, [active, visibleMessages])
+  const allConversations = useMemo(() => groupConversations(visibleRows), [visibleRows])
 
-  const hasData = visibleMessages.length > 0
+  const filteredConversations = useMemo(() => {
+    if (active === "all") return allConversations
+    return allConversations.filter(c => c.ch === active)
+  }, [allConversations, active])
+
+  const unreadCount = useMemo(
+    () => allConversations.filter(c => !readConvKeys.has(c.key)).length,
+    [allConversations, readConvKeys]
+  )
+
+  const hasData = visibleRows.length > 0
   const hasConnected = connected.size > 0
+
+  const selectedConv = useMemo(
+    () => allConversations.find(c => c.key === selectedConvKey) ?? null,
+    [allConversations, selectedConvKey]
+  )
+
+  function openConversation(key: string) {
+    setSelectedConvKey(key)
+    setReadConvKeys(prev => new Set([...prev, key]))
+  }
 
   return (
     <div className="dash-shell">
@@ -116,8 +245,8 @@ export function Dashboard({
           <div className="heading">Inbox</div>
           {Object.entries(CHANNEL_META).map(([key, m]) => {
             const count = key === "all"
-              ? visibleMessages.length
-              : visibleMessages.filter(msg => msg.ch === key).length
+              ? allConversations.length
+              : allConversations.filter(c => c.ch === key).length
             const isConnected = key === "all" || connected.has(key)
             if (!isConnected) {
               return (
@@ -137,7 +266,7 @@ export function Dashboard({
               <div
                 key={key}
                 className={`side-item ${active === key ? "active" : ""}`}
-                onClick={() => setActive(key)}
+                onClick={() => { setActive(key); setSelectedConvKey(null) }}
               >
                 <span className="swatch" style={{ background: m.color }} />
                 {m.label}
@@ -194,154 +323,197 @@ export function Dashboard({
       </aside>
 
       {/* ─── Main ─── */}
-      <main className="dash-main fade-enter">
-        <div className="dash-greeting">
-          <div className="greet" style={{ fontFamily: "var(--sans)" }}>
-            <WordReveal delay={0.05} gap={0.06}>{greeting}, </WordReveal>
-            <br />
-            <span className="it"><WordReveal delay={0.25} gap={0.06}>{firstName}.</WordReveal></span>
-          </div>
-          <div className="meta">
-            {dateStr}<br />
-            {loadingMessages ? "Loading messages…" : hasData ? `${visibleMessages.filter(m => m.unread).length} new since 07:00` : "Connect a service to get started"}
-          </div>
-        </div>
-
-        {missing.length > 0 && (
-          <div className="connect-more-card">
-            <div className="cmc-head">
-              <div>
-                <div className="eyebrow" style={{ color: "var(--accent)" }}>{hasConnected ? "Get more from UAssist" : "Welcome to UAssist"}</div>
-                <h3 className="cmc-title">
-                  {hasConnected
-                    ? `Connect ${missing.length === 1 ? "one more channel" : `${missing.length} more channels`} to see your full picture.`
-                    : "Connect your first service to get started."}
-                </h3>
-                <p className="cmc-sub">
-                  {hasConnected
-                    ? "UAssist works with whatever you've connected — but the assistant gets sharper the more sources it can listen to."
-                    : "UAssist unifies your WhatsApp, Signal, and email into one calm surface. Connect a service below and your messages will appear here within seconds."}
-                </p>
-              </div>
-            </div>
-            <div className="cmc-row">
-              {missing.map(s => {
-                const meta = CHANNEL_META[s as keyof typeof CHANNEL_META]
-                const icon = s === "whatsapp" ? <Logo.WhatsApp size={18} /> : s === "signal" ? <Logo.Signal size={18} /> : <Logo.Mail size={18} />
-                return (
-                  <button key={s} className="cmc-chip" onClick={() => onConnect?.(s)}>
-                    <span className="cmc-chip-icon" style={{ background: meta.color }}>{icon}</span>
-                    <span className="cmc-chip-text">
-                      <span className="n">Connect {meta.label}</span>
-                      <span className="d">{s === "email" ? "IMAP · 1 minute" : "Scan QR · 30 seconds"}</span>
-                    </span>
-                    <I.Arrow />
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {hasData ? (
-          <>
-            <div className="section-h">
-              <span className="t serif">What matters today</span>
-              <span className="a">AI digest · refreshed 2m ago</span>
-            </div>
-
-            <div className="digest-grid">
-              <div className="digest-card">
-                <span className="kind"><span className="k-dot" style={{ background: "var(--insight)" }} /> Tasks · 4</span>
-                <div className="title-line">
-                  <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>Oat milk</span> on the way home, and confirm a{" "}
-                  <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>Thursday review</span> with Jonas.
-                </div>
-                <div className="ctx"><span className="ch-dot" /> Pulled from WhatsApp, Signal</div>
-              </div>
-              <div className="digest-card">
-                <span className="kind"><span className="k-dot" style={{ background: "var(--accent)" }} /> Schedule</span>
-                <div className="title-line">
-                  School pickup moved to <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>16:30</span>. Family lunch Sunday — bring something sweet.
-                </div>
-                <div className="ctx"><span className="ch-dot" /> WhatsApp · Lena, Mama</div>
-              </div>
-              <div className="digest-card">
-                <span className="kind"><span className="k-dot" style={{ background: "var(--email)" }} /> Heads up</span>
-                <div className="title-line">
-                  Your <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>ICE to München</span> changed to platform 7. Stripe invoice paid: €840.
-                </div>
-                <div className="ctx"><span className="ch-dot" /> Email · Deutsche Bahn, Stripe</div>
-              </div>
-            </div>
-          </>
-        ) : hasConnected ? (
-          <div className="digest-grid">
-            <div className="digest-card" style={{ opacity: 0.55, gridColumn: "1 / -1" }}>
-              <span className="kind"><span className="k-dot" style={{ background: "var(--ink-mute)" }} /> AI digest · waiting for data</span>
-              <div className="title-line" style={{ color: "var(--ink-mute)", fontSize: 15 }}>
-                Once messages arrive, UAssist will surface tasks, schedule items, and things that need your attention — all in one digest.
-              </div>
-              <div className="ctx"><span className="ch-dot" /> Pulled from your connected services</div>
-            </div>
-          </div>
+      <main className="dash-main">
+        {selectedConv ? (
+          <ConversationDetail
+            conv={selectedConv}
+            onClose={() => setSelectedConvKey(null)}
+          />
         ) : (
-          <div className="digest-grid">
-            {[
-              { dot: "var(--insight)", label: "Tasks", desc: "UAssist spots action items in your conversations and surfaces them before you forget." },
-              { dot: "var(--accent)", label: "Schedule", desc: "Times, appointments, and plans mentioned in any message — collected automatically." },
-              { dot: "var(--email)", label: "Heads up", desc: "Important emails, alerts, and things that need a quick read, filtered from the noise." },
-            ].map(({ dot, label, desc }) => (
-              <div key={label} className="digest-card" style={{ opacity: 0.45 }}>
-                <span className="kind"><span className="k-dot" style={{ background: dot }} /> {label}</span>
-                <div className="title-line" style={{ color: "var(--ink-mute)", fontSize: 14, fontStyle: "normal" }}>{desc}</div>
-                <div className="ctx" style={{ opacity: 0 }}>placeholder</div>
+          <div className="fade-enter">
+            <div className="dash-greeting">
+              <div className="greet" style={{ fontFamily: "var(--sans)" }}>
+                <WordReveal delay={0.05} gap={0.06}>{greeting}, </WordReveal>
+                <br />
+                <span className="it"><WordReveal delay={0.25} gap={0.06}>{firstName}.</WordReveal></span>
               </div>
-            ))}
-          </div>
-        )}
+              <div className="meta">
+                {dateStr}<br />
+                {loadingMessages ? "Loading messages…" : hasData ? `${unreadCount} unread conversation${unreadCount !== 1 ? "s" : ""}` : "Connect a service to get started"}
+              </div>
+            </div>
 
-        <div className="section-h">
-          <span className="t serif">Inbox</span>
-          <span className="a" style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            {hasData && (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <I.Search size={11} /> Search <span className="kbd">⌘K</span>
-              </span>
-            )}
-            <span>{hasData ? `${filtered.length} messages` : "No messages yet"}</span>
-          </span>
-        </div>
-
-        {hasData ? (
-          <div className="inbox-list">
-            {filtered.map(m => (
-              <div
-                key={m.id}
-                className={`inbox-row ${m.unread ? "unread" : ""} ${selected === m.id ? "selected" : ""}`}
-                onClick={() => setSelected(m.id)}
-                style={selected === m.id ? { background: "var(--paper-soft)" } : undefined}
-              >
-                <div className="av" style={{ background: m.color }}>{m.initial}</div>
-                <div className="mid">
-                  <div className="name-row">
-                    <span className="nm">{m.name}</span>
-                    <ChannelTag ch={m.ch} />
-                    {m.unread && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)" }} />}
+            {missing.length > 0 && (
+              <div className="connect-more-card">
+                <div className="cmc-head">
+                  <div>
+                    <div className="eyebrow" style={{ color: "var(--accent)" }}>{hasConnected ? "Get more from UAssist" : "Welcome to UAssist"}</div>
+                    <h3 className="cmc-title">
+                      {hasConnected
+                        ? `Connect ${missing.length === 1 ? "one more channel" : `${missing.length} more channels`} to see your full picture.`
+                        : "Connect your first service to get started."}
+                    </h3>
+                    <p className="cmc-sub">
+                      {hasConnected
+                        ? "UAssist works with whatever you've connected — but the assistant gets sharper the more sources it can listen to."
+                        : "UAssist unifies your WhatsApp, Signal, and email into one calm surface. Connect a service below and your messages will appear here within seconds."}
+                    </p>
                   </div>
-                  <div className="preview">{m.preview}</div>
                 </div>
-                <div className="time">{m.time}</div>
+                <div className="cmc-row">
+                  {missing.map(s => {
+                    const meta = CHANNEL_META[s as keyof typeof CHANNEL_META]
+                    const icon = s === "whatsapp" ? <Logo.WhatsApp size={18} /> : s === "signal" ? <Logo.Signal size={18} /> : <Logo.Mail size={18} />
+                    return (
+                      <button key={s} className="cmc-chip" onClick={() => onConnect?.(s)}>
+                        <span className="cmc-chip-icon" style={{ background: meta.color }}>{icon}</span>
+                        <span className="cmc-chip-text">
+                          <span className="n">Connect {meta.label}</span>
+                          <span className="d">{s === "email" ? "IMAP · 1 minute" : "Scan QR · 30 seconds"}</span>
+                        </span>
+                        <I.Arrow />
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ padding: "40px 0", textAlign: "center", color: "var(--ink-faint)" }}>
-            <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-              {hasConnected
-                ? "Your messages will appear here as they arrive."
-                : "Connect WhatsApp, Signal, or Email above and your messages will flow in here."}
+            )}
+
+            {hasData ? (
+              <>
+                <div className="section-h">
+                  <span className="t serif">What matters today</span>
+                  <span className="a">AI digest · refreshed 2m ago</span>
+                </div>
+
+                {isDemo ? (
+                  <div className="digest-grid">
+                    <div className="digest-card">
+                      <span className="kind"><span className="k-dot" style={{ background: "var(--insight)" }} /> Tasks · 4</span>
+                      <div className="title-line">
+                        <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>Oat milk</span> on the way home, and confirm a{" "}
+                        <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>Thursday review</span> with Jonas.
+                      </div>
+                      <div className="ctx"><span className="ch-dot" /> Pulled from WhatsApp, Signal</div>
+                    </div>
+                    <div className="digest-card">
+                      <span className="kind"><span className="k-dot" style={{ background: "var(--accent)" }} /> Schedule</span>
+                      <div className="title-line">
+                        School pickup moved to <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>16:30</span>. Family lunch Sunday — bring something sweet.
+                      </div>
+                      <div className="ctx"><span className="ch-dot" /> WhatsApp · Lena, Mama</div>
+                    </div>
+                    <div className="digest-card">
+                      <span className="kind"><span className="k-dot" style={{ background: "var(--email)" }} /> Heads up</span>
+                      <div className="title-line">
+                        Your <span className="serif-it" style={{ color: "var(--accent)", fontSize: 18 }}>ICE to München</span> changed to platform 7. Stripe invoice paid: €840.
+                      </div>
+                      <div className="ctx"><span className="ch-dot" /> Email · Deutsche Bahn, Stripe</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="digest-grid">
+                    <div className="digest-card" style={{ opacity: 0.55, gridColumn: "1 / -1" }}>
+                      <span className="kind"><span className="k-dot" style={{ background: "var(--ink-mute)" }} /> AI digest · coming soon</span>
+                      <div className="title-line" style={{ color: "var(--ink-mute)", fontSize: 15 }}>
+                        Your assistant is reading your messages. Smart digests, task extraction, and schedule summaries are on the way.
+                      </div>
+                      <div className="ctx"><span className="ch-dot" /> Pulled from your connected services</div>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : hasConnected ? (
+              <>
+                <div className="section-h">
+                  <span className="t serif">What matters today</span>
+                  <span className="a">AI digest · waiting for data</span>
+                </div>
+                <div className="digest-grid">
+                  <div className="digest-card" style={{ opacity: 0.55, gridColumn: "1 / -1" }}>
+                    <span className="kind"><span className="k-dot" style={{ background: "var(--ink-mute)" }} /> AI digest · waiting for data</span>
+                    <div className="title-line" style={{ color: "var(--ink-mute)", fontSize: 15 }}>
+                      Once messages arrive, UAssist will surface tasks, schedule items, and things that need your attention — all in one digest.
+                    </div>
+                    <div className="ctx"><span className="ch-dot" /> Pulled from your connected services</div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="section-h">
+                  <span className="t serif">What matters today</span>
+                </div>
+                <div className="digest-grid">
+                  {[
+                    { dot: "var(--insight)", label: "Tasks", desc: "UAssist spots action items in your conversations and surfaces them before you forget." },
+                    { dot: "var(--accent)", label: "Schedule", desc: "Times, appointments, and plans mentioned in any message — collected automatically." },
+                    { dot: "var(--email)", label: "Heads up", desc: "Important emails, alerts, and things that need a quick read, filtered from the noise." },
+                  ].map(({ dot, label, desc }) => (
+                    <div key={label} className="digest-card" style={{ opacity: 0.45 }}>
+                      <span className="kind"><span className="k-dot" style={{ background: dot }} /> {label}</span>
+                      <div className="title-line" style={{ color: "var(--ink-mute)", fontSize: 14, fontStyle: "normal" }}>{desc}</div>
+                      <div className="ctx" style={{ opacity: 0 }}>placeholder</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div className="section-h">
+              <span className="t serif">Inbox</span>
+              <span className="a" style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                {hasData && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <I.Search size={11} /> Search <span className="kbd">⌘K</span>
+                  </span>
+                )}
+                <span>{hasData ? `${filteredConversations.length} conversation${filteredConversations.length !== 1 ? "s" : ""}` : "No messages yet"}</span>
+              </span>
             </div>
+
+            {hasData ? (
+              <div className="inbox-list">
+                {filteredConversations.map(conv => {
+                  const isUnread = !readConvKeys.has(conv.key)
+                  const lastMsg = conv.lastMessage
+                  const preview = lastMsg.fromMe ? `You: ${lastMsg.preview}` : lastMsg.preview
+                  return (
+                    <div
+                      key={conv.key}
+                      className={`inbox-row ${isUnread ? "unread" : ""}`}
+                      onClick={() => openConversation(conv.key)}
+                    >
+                      <div className="av" style={{ background: conv.color }}>{conv.initial}</div>
+                      <div className="mid">
+                        <div className="name-row">
+                          <span className="nm">{conv.name}</span>
+                          <ChannelTag ch={conv.ch} />
+                          {isUnread && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)", flexShrink: 0 }} />}
+                        </div>
+                        <div className="preview">{preview}</div>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                        <div className="time">{lastMsg.time}</div>
+                        {conv.messages.length > 1 && (
+                          <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--ink-faint)", letterSpacing: "0.06em" }}>
+                            {conv.messages.length}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div style={{ padding: "40px 0", textAlign: "center", color: "var(--ink-faint)" }}>
+                <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  {hasConnected
+                    ? "Your messages will appear here as they arrive."
+                    : "Connect WhatsApp, Signal, or Email above and your messages will flow in here."}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -353,7 +525,7 @@ export function Dashboard({
           Your <span className="it">assistant</span>
         </div>
 
-        {hasData ? (
+        {hasData && isDemo ? (
           <>
             <div className="assistant-bubble fade-enter">
               <div className="from">
@@ -397,7 +569,7 @@ export function Dashboard({
             </div>
           </>
         ) : (
-          <div className="assistant-bubble fade-enter" style={{ opacity: 0.55 }}>
+          <div className="assistant-bubble fade-enter" style={{ opacity: hasData ? 1 : 0.55 }}>
             <div className="from">
               <span className="av">
                 <BrandLogo size={18} color="transparent" fg="var(--accent)" />
@@ -405,7 +577,9 @@ export function Dashboard({
               UAssist
             </div>
             <div className="body">
-              Connect your services and I'll start reading your messages. I'll surface tasks, reminders, and things that need your attention — so you don't have to.
+              {hasData
+                ? <>Your messages are coming in. Smart digests, task extraction, and schedule summaries are <em>on the way</em>.</>
+                : "Connect your services and I'll start reading your messages. I'll surface tasks, reminders, and things that need your attention — so you don't have to."}
             </div>
           </div>
         )}
