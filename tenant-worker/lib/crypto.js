@@ -30,10 +30,6 @@ function decryptWithKey(encryptedJson, keyBuffer) {
     ]).toString('utf8');
 }
 
-function encrypt(plaintext) {
-    return encryptWithKey(plaintext, getKey());
-}
-
 function decrypt(encryptedJson) {
     return decryptWithKey(encryptedJson, getKey());
 }
@@ -48,4 +44,4 @@ function isEncrypted(value) {
     }
 }
 
-module.exports = { encrypt, decrypt, encryptWithKey, decryptWithKey, isEncrypted };
+module.exports = { decrypt, encryptWithKey, decryptWithKey, isEncrypted };
