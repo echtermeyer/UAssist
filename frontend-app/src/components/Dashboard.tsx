@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from "react"
 import { BrandLogo, WordReveal, I, Logo } from "./shared"
-import { formatRelativeTime } from "@/lib/utils"
+import { formatAbsoluteTime } from "@/lib/utils"
 import type { RawMessage } from "@/lib/api"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ function toInboxRow(msg: RawMessage): InboxRow {
     name,
     conversationKey: String(conversationKey),
     preview: preview.slice(0, 200),
-    time: formatRelativeTime(msg._savedAt),
+    time: formatAbsoluteTime(msg._savedAt),
     timestamp: ts,
     fromMe,
     initial: name.charAt(0).toUpperCase(),
@@ -193,14 +193,17 @@ function ConversationDetail({ conv, onClose }: { conv: Conversation; onClose: ()
                   <ConvAvatar
                     initial={(msg.senderName || conv.initial).charAt(0).toUpperCase()}
                     color={conv.color}
+                    pictureUrl={conv.isGroup ? undefined : conv.pictureUrl}
                     size={28}
                     className="msg-av"
                   />
                 )}
-                <div className="msg-bubble" style={msg.fromMe ? { background: "var(--ink)", color: "var(--paper)" } : { background: "var(--card-elev)" }}>
-                  {showSender && <div className="msg-sender-label">{msg.senderName}</div>}
-                  <div className="msg-text">{msg.preview}</div>
-                  <div className="msg-time" style={msg.fromMe ? { color: "rgba(246,241,231,0.55)" } : undefined}>{msg.time}</div>
+                <div className="msg-content">
+                  <div className="msg-bubble" style={msg.fromMe ? { background: "var(--ink)", color: "var(--paper)" } : undefined}>
+                    {showSender && <div className="msg-sender-label">{msg.senderName}</div>}
+                    <div className="msg-text">{msg.preview}</div>
+                  </div>
+                  <div className="msg-time">{new Date(msg.timestamp).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</div>
                 </div>
                 {msg.fromMe && (
                   <div className="msg-av msg-av-me">Me</div>

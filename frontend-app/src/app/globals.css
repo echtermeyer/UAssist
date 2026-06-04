@@ -1751,13 +1751,21 @@ a { color: inherit; }
 }
 
 .msg-bubble {
-  max-width: 72%;
   padding: 10px 14px;
   border-radius: 18px;
   font-size: 14.5px;
   line-height: 1.5;
   word-break: break-word;
 }
+
+.msg-content {
+  display: flex;
+  flex-direction: column;
+  max-width: 72%;
+}
+
+.msg-row.msg-recv .msg-content { align-items: flex-start; }
+.msg-row.msg-sent .msg-content { align-items: flex-end; }
 
 .msg-row.msg-recv .msg-bubble {
   background: var(--card-elev);
@@ -1780,8 +1788,8 @@ a { color: inherit; }
   font-size: 10px;
   letter-spacing: 0.08em;
   color: var(--ink-faint);
-  margin-top: 5px;
-  text-align: right;
+  margin-top: 3px;
+  padding: 0 2px;
 }
 
 .msg-sender-label {

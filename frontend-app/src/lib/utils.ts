@@ -2,17 +2,15 @@ export function cn(...classes: (string | undefined | false | null)[]): string {
   return classes.filter(Boolean).join(" ")
 }
 
-export function formatRelativeTime(timestamp: string): string {
+export function formatAbsoluteTime(timestamp: string): string {
   const date = new Date(timestamp)
   const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-
-  if (diffMins < 1) return "now"
-  if (diffMins < 60) return `${diffMins}m`
-  if (diffHours < 24) return `${diffHours}h`
-  if (diffDays < 7) return `${diffDays}d`
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const diffDays = Math.round((today.getTime() - msgDay.getTime()) / 86400000)
+  const timeStr = date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+  if (diffDays === 0) return timeStr
+  if (diffDays === 1) return "Yesterday"
+  if (diffDays < 7) return date.toLocaleDateString("en-GB", { weekday: "short" })
+  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" })
 }
