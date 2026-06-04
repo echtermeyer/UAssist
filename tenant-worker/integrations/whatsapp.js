@@ -44,6 +44,7 @@ async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
     });
 
     client.on('qr', async qr => {
+        console.log('[whatsapp] QR generated');
         try {
             const dataUrl = await qrcode.toDataURL(qr);
             await onboardingCol.updateOne(
