@@ -59,4 +59,5 @@ jobs:
 
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose pull
+            docker pull ghcr.io/$REPO/tenant-worker:latest
             docker compose up -d
