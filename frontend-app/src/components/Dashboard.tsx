@@ -193,7 +193,7 @@ function ConversationDetail({ conv, onClose }: { conv: Conversation; onClose: ()
                   <ConvAvatar
                     initial={(msg.senderName || conv.initial).charAt(0).toUpperCase()}
                     color={conv.color}
-                    pictureUrl={conv.isGroup ? undefined : conv.pictureUrl}
+                    pictureUrl={conv.pictureUrl}
                     size={28}
                     className="msg-av"
                   />
