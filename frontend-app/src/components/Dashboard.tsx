@@ -125,6 +125,12 @@ function ChannelTag({ ch }: { ch: string }) {
 
 // ─── ConvAvatar ───────────────────────────────────────────────────────────────
 
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase()
+}
+
 function ConvAvatar({ initial, color, pictureUrl, size = 36, className, style }: {
   initial: string; color: string; pictureUrl?: string; size?: number; className?: string; style?: React.CSSProperties
 }) {
@@ -193,9 +199,9 @@ function ConversationDetail({ conv, onClose }: { conv: Conversation; onClose: ()
               <div className={`msg-row ${msg.fromMe ? "msg-sent" : "msg-recv"}`}>
                 {!msg.fromMe && (
                   <ConvAvatar
-                    initial={(msg.senderName || conv.initial).charAt(0).toUpperCase()}
+                    initial={conv.isGroup && msg.senderName ? getInitials(msg.senderName) : conv.initial}
                     color={conv.color}
-                    pictureUrl={msg.senderPictureUrl || conv.pictureUrl}
+                    pictureUrl={conv.isGroup ? msg.senderPictureUrl : (msg.senderPictureUrl || conv.pictureUrl)}
                     size={28}
                     className="msg-av"
                   />
