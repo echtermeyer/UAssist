@@ -98,7 +98,7 @@ async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
         }, 2000);
     });
 
-    client.on('message', async msg => {
+    const saveMessage = async msg => {
         const chat = await msg.getChat();
         console.log(`[whatsapp] message from ${chat.name || msg.from} (${msg.type})`);
         try {
@@ -117,7 +117,10 @@ async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
         } catch (err) {
             console.error('[whatsapp] failed to save message:', err.message);
         }
-    });
+    };
+
+    client.on('message', saveMessage);
+    client.on('message_create', saveMessage);
 
     client.on('disconnected', reason => {
         console.error('[whatsapp] disconnected:', reason);
