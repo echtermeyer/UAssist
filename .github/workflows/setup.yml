@@ -32,11 +32,11 @@ jobs:
               sudo usermod -aG docker deploy
             fi
 
-            # Clone repo if not present, otherwise pull
+            # Clone repo if not present, otherwise force-reset to match remote
             if [ ! -d /home/deploy/UAssist ]; then
               git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} /home/deploy/UAssist
             else
-              cd /home/deploy/UAssist && git pull origin main
+              cd /home/deploy/UAssist && git fetch origin main && git reset --hard origin/main && git clean -fd
             fi
 
             cd /home/deploy/UAssist
