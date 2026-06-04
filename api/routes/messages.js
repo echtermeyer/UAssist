@@ -7,7 +7,7 @@ const router = Router();
 const SERVICES = ['whatsapp', 'signal', 'email', 'slack'];
 
 const SERVICE_FIELDS = {
-    whatsapp: ['body', 'from', 'to', '_chat'],
+    whatsapp: ['body', 'from', 'to', '_chat', 'fromName'],
     signal: ['message'],
     email: ['bodyText', 'bodyHtml'],
     slack: ['message'],

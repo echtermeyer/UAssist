@@ -14,6 +14,7 @@ async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
     const onboardingCol = tenantDb.collection('onboarding');
     const whatsappCol = tenantDb.collection('whatsapp');
     const outboxCol = tenantDb.collection('whatsapp_outbox');
+    const pictureCache = new Map();
 
     await onboardingCol.updateOne(
         { service: 'whatsapp' },
@@ -101,6 +102,25 @@ async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
     const saveMessage = async msg => {
         const chat = await msg.getChat();
         console.log(`[whatsapp] message from ${chat.name || msg.from} (${msg.type})`);
+
+        let fromName = '';
+        try {
+            const contact = await msg.getContact();
+            fromName = contact.pushname || contact.name || '';
+        } catch {}
+
+        const picJid = chat.id._serialized;
+        let pictureUrl = '';
+        if (pictureCache.has(picJid)) {
+            pictureUrl = pictureCache.get(picJid);
+        } else {
+            try {
+                pictureUrl = await client.getProfilePicUrl(picJid) || '';
+            } catch {}
+            pictureCache.set(picJid, pictureUrl);
+            setTimeout(() => pictureCache.delete(picJid), 3600000);
+        }
+
         try {
             await whatsappCol.updateOne(
                 { 'id._serialized': msg.id._serialized },
@@ -113,6 +133,8 @@ async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
                     id: msg.id,
                     hasMedia: msg.hasMedia,
                     _chat: encryptWithKey(chat.name || '', dataKey),
+                    fromName: encryptWithKey(fromName, dataKey),
+                    pictureUrl,
                     tenantId,
                     _savedAt: new Date(),
                 }},

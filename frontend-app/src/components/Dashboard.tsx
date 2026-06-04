@@ -18,6 +18,9 @@ type InboxRow = {
   fromMe: boolean
   initial: string
   color: string
+  senderName: string
+  isGroup: boolean
+  pictureUrl?: string
 }
 
 type Conversation = {
@@ -28,6 +31,8 @@ type Conversation = {
   initial: string
   messages: InboxRow[]
   lastMessage: InboxRow
+  isGroup: boolean
+  pictureUrl?: string
 }
 
 const CHANNEL_COLORS = {
@@ -38,12 +43,11 @@ const CHANNEL_COLORS = {
 
 function toInboxRow(msg: RawMessage): InboxRow {
   const ch = (msg._service === "slack" ? "email" : msg._service) as "whatsapp" | "signal" | "email"
-  const name = msg.fromName
-    || (msg._service === "whatsapp" ? msg._chat : undefined)
-    || (typeof msg.from === "string" ? msg.from : undefined)
-    || msg.envelope?.from?.[0]?.name
-    || msg.envelope?.from?.[0]?.address
-    || "Unknown"
+  const isGroup = ch === "whatsapp" && !!(msg.from?.includes("@g.us") || msg.to?.includes("@g.us"))
+  const senderName = msg.fromName || ""
+  const name = ch === "whatsapp"
+    ? (msg._chat || msg.from || "Unknown")
+    : (msg.fromName || (typeof msg.from === "string" ? msg.from : undefined) || msg.envelope?.from?.[0]?.name || msg.envelope?.from?.[0]?.address || "Unknown")
   const preview = msg.bodyText || msg.body || msg.message || msg.envelope?.subject || ""
   const fromMe = !!(msg.fromMe || msg.id?.fromMe)
   const ts = msg.timestamp
@@ -65,6 +69,9 @@ function toInboxRow(msg: RawMessage): InboxRow {
     fromMe,
     initial: name.charAt(0).toUpperCase(),
     color: CHANNEL_COLORS[ch] || "#8c5a1d",
+    senderName,
+    isGroup,
+    pictureUrl: msg.pictureUrl,
   }
 }
 
@@ -80,15 +87,19 @@ function groupConversations(rows: InboxRow[]): Conversation[] {
         initial: row.initial,
         messages: [],
         lastMessage: row,
+        isGroup: row.isGroup,
+        pictureUrl: row.pictureUrl,
       })
     }
     const conv = map.get(row.conversationKey)!
     conv.messages.push(row)
     if (row.timestamp > conv.lastMessage.timestamp) conv.lastMessage = row
-    if (!row.fromMe && row.name !== "Unknown") {
+    if (row.ch !== "whatsapp" && !row.fromMe && row.name !== "Unknown") {
       conv.name = row.name
       conv.initial = row.name.charAt(0).toUpperCase()
     }
+    if (!conv.pictureUrl && row.pictureUrl) conv.pictureUrl = row.pictureUrl
+    if (row.isGroup) conv.isGroup = true
   }
   for (const conv of map.values()) {
     conv.messages.sort((a, b) => a.timestamp - b.timestamp)
@@ -110,6 +121,36 @@ function ChannelTag({ ch }: { ch: string }) {
   return <span className="ch-tag" style={{ color: meta.color }}>{meta.label}</span>
 }
 
+// ─── ConvAvatar ───────────────────────────────────────────────────────────────
+
+function ConvAvatar({ initial, color, pictureUrl, size = 36, className, style }: {
+  initial: string; color: string; pictureUrl?: string; size?: number; className?: string; style?: React.CSSProperties
+}) {
+  return (
+    <div
+      className={className}
+      style={{
+        width: size, height: size, borderRadius: "50%",
+        background: color,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        overflow: "hidden", flexShrink: 0, position: "relative",
+        fontSize: size * 0.38, fontWeight: 600, color: "#fff",
+        ...style,
+      }}
+    >
+      {initial}
+      {pictureUrl && (
+        <img
+          src={pictureUrl}
+          alt=""
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+          onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none" }}
+        />
+      )}
+    </div>
+  )
+}
+
 // ─── Conversation Detail ───────────────────────────────────────────────────────
 
 function ConversationDetail({ conv, onClose }: { conv: Conversation; onClose: () => void }) {
@@ -126,7 +167,7 @@ function ConversationDetail({ conv, onClose }: { conv: Conversation; onClose: ()
           <span>Back</span>
         </button>
         <div className="conv-header-info">
-          <div className="conv-header-av" style={{ background: conv.color }}>{conv.initial}</div>
+          <ConvAvatar initial={conv.initial} color={conv.color} pictureUrl={conv.pictureUrl} size={36} className="conv-header-av" />
           <div className="conv-header-text">
             <span className="conv-header-name">{conv.name}</span>
             <ChannelTag ch={conv.ch} />
@@ -139,6 +180,7 @@ function ConversationDetail({ conv, onClose }: { conv: Conversation; onClose: ()
         {conv.messages.map((msg, i) => {
           const prevMsg = i > 0 ? conv.messages[i - 1] : null
           const showDate = !prevMsg || new Date(msg.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString()
+          const showSender = conv.isGroup && !msg.fromMe && !!msg.senderName
           return (
             <React.Fragment key={msg.id}>
               {showDate && (
@@ -148,9 +190,15 @@ function ConversationDetail({ conv, onClose }: { conv: Conversation; onClose: ()
               )}
               <div className={`msg-row ${msg.fromMe ? "msg-sent" : "msg-recv"}`}>
                 {!msg.fromMe && (
-                  <div className="msg-av" style={{ background: conv.color }}>{conv.initial}</div>
+                  <ConvAvatar
+                    initial={(msg.senderName || conv.initial).charAt(0).toUpperCase()}
+                    color={conv.color}
+                    size={28}
+                    className="msg-av"
+                  />
                 )}
                 <div className="msg-bubble" style={msg.fromMe ? { background: "var(--ink)", color: "var(--paper)" } : { background: "var(--card-elev)" }}>
+                  {showSender && <div className="msg-sender-label">{msg.senderName}</div>}
                   <div className="msg-text">{msg.preview}</div>
                   <div className="msg-time" style={msg.fromMe ? { color: "rgba(246,241,231,0.55)" } : undefined}>{msg.time}</div>
                 </div>
@@ -189,7 +237,10 @@ export function Dashboard({
 }: DashboardProps) {
   const [active, setActive] = useState("all")
   const [selectedConvKey, setSelectedConvKey] = useState<string | null>(null)
-  const [readConvKeys, setReadConvKeys] = useState<Set<string>>(new Set())
+  const [readConvKeys, setReadConvKeys] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set()
+    try { return new Set(JSON.parse(localStorage.getItem("ua_read_convs") || "[]")) } catch { return new Set() }
+  })
 
   const allServices = ["whatsapp", "signal", "email"]
   const missing = allServices.filter(s => !connected.has(s))
@@ -229,7 +280,11 @@ export function Dashboard({
 
   function openConversation(key: string) {
     setSelectedConvKey(key)
-    setReadConvKeys(prev => new Set([...prev, key]))
+    setReadConvKeys(prev => {
+      const next = new Set([...prev, key])
+      try { localStorage.setItem("ua_read_convs", JSON.stringify([...next])) } catch {}
+      return next
+    })
   }
 
   return (
@@ -484,7 +539,7 @@ export function Dashboard({
                       className={`inbox-row ${isUnread ? "unread" : ""}`}
                       onClick={() => openConversation(conv.key)}
                     >
-                      <div className="av" style={{ background: conv.color }}>{conv.initial}</div>
+                      <ConvAvatar initial={conv.initial} color={conv.color} pictureUrl={conv.pictureUrl} size={32} className="av" />
                       <div className="mid">
                         <div className="name-row">
                           <span className="nm">{conv.name}</span>

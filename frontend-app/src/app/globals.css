@@ -1784,6 +1784,14 @@ a { color: inherit; }
   text-align: right;
 }
 
+.msg-sender-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-mute);
+  margin-bottom: 3px;
+  letter-spacing: 0.01em;
+}
+
 /* ─── Misc utilities ─────────────────────────────────────────────────────── */
 
 .fade-enter   { animation: fadeUp 0.55s var(--ease-out) both; }
