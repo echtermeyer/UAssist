@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
               `default-src 'self'`,
               `script-src 'self' 'unsafe-inline' 'unsafe-eval'`,
               `style-src 'self' 'unsafe-inline'`,
-              `img-src 'self' data: blob:`,
+              `img-src 'self' data: blob: https://*.whatsapp.net https://*.fbcdn.net`,
               `connect-src 'self' ${API_URL}`,
               `font-src 'self'`,
               `frame-ancestors 'none'`,
