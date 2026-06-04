@@ -1,9 +1,9 @@
 #!/bin/bash
-# Restrict ports 22, 3000, 6080 to German IPs only via ipset.
+# Restrict ports 22, 3000 to German IPs only via ipset.
 set -e
 
 EXTRA_ALLOW=""
-PORTS="22 3000 6080"
+PORTS="22 3000"
 SETNAME="geoip-de"
 
 echo "[geoip] Downloading DE IP ranges..."
@@ -35,4 +35,4 @@ for port in $PORTS; do
 done
 
 echo "[geoip] Done. Ports $PORTS restricted to Germany (DE) only."
-iptables -L INPUT -n --line-numbers | grep -E '(geoip|dpt:22|dpt:3000|dpt:6080)' || true
+iptables -L INPUT -n --line-numbers | grep -E '(geoip|dpt:22|dpt:3000)' || true
