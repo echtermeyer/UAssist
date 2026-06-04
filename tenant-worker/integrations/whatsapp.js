@@ -102,24 +102,27 @@ async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
         const chat = await msg.getChat();
         console.log(`[whatsapp] message from ${chat.name || msg.from} (${msg.type})`);
         try {
-            await whatsappCol.insertOne({
-                from: msg.from,
-                to: msg.to,
-                body: encryptWithKey(msg.body || '', dataKey),
-                type: msg.type,
-                timestamp: msg.timestamp,
-                id: msg.id,
-                hasMedia: msg.hasMedia,
-                _chat: chat.name,
-                tenantId,
-                _savedAt: new Date(),
-            });
+            await whatsappCol.updateOne(
+                { 'id._serialized': msg.id._serialized },
+                { $setOnInsert: {
+                    from: encryptWithKey(msg.from || '', dataKey),
+                    to: encryptWithKey(msg.to || '', dataKey),
+                    body: encryptWithKey(msg.body || '', dataKey),
+                    type: msg.type,
+                    timestamp: msg.timestamp,
+                    id: msg.id,
+                    hasMedia: msg.hasMedia,
+                    _chat: encryptWithKey(chat.name || '', dataKey),
+                    tenantId,
+                    _savedAt: new Date(),
+                }},
+                { upsert: true }
+            );
         } catch (err) {
             console.error('[whatsapp] failed to save message:', err.message);
         }
     };
 
-    client.on('message', saveMessage);
     client.on('message_create', saveMessage);
 
     client.on('disconnected', reason => {
