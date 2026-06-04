@@ -22,8 +22,8 @@ RUN curl -fsSL "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_
 
 WORKDIR /app
 
-COPY package.json .
-RUN npm install --production
+COPY package*.json ./
+RUN npm ci --omit=dev
 
 COPY . .
 
