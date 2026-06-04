@@ -82,4 +82,5 @@ jobs:
             REPO=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
             docker compose pull
             docker pull ghcr.io/$REPO/tenant-worker:latest
+            docker compose down --remove-orphans
             docker compose up -d
