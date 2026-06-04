@@ -47,20 +47,29 @@ router.get('/', async (req, res, next) => {
     try {
         const db = getTenantDb(tenantId);
         const dataKey = await getUserDataKey(req.user.username);
-        const [results, sentSignal, profilePics] = await Promise.all([
+        const [results, sentSignal, profilePics, contactPics] = await Promise.all([
             Promise.all(
                 SERVICES.map(s => db.collection(s).find({}).sort({ _savedAt: -1 }).limit(100).toArray()
                     .then(docs => docs.map(d => decryptDoc({ ...d, _service: s }, s, dataKey))))
             ),
             getSentSignalMessages(db, dataKey),
             db.collection('profile_pics').find({}).toArray(),
+            db.collection('contact_pics').find({}).toArray(),
         ]);
         const picMap = new Map(profilePics.map(p => [p.chatName, p.url]));
+        const contactPicMap = new Map(contactPics.map(p => [p.jid, p.url]));
         const allMessages = [...results.flat(), ...sentSignal];
         for (const msg of allMessages) {
             if (msg._service === 'whatsapp' && msg._chat) {
                 const url = picMap.get(msg._chat);
                 if (url) msg.pictureUrl = url;
+                if (msg.author) {
+                    const contactUrl = contactPicMap.get(msg.author);
+                    if (contactUrl) msg.senderPictureUrl = contactUrl;
+                } else if (msg.from) {
+                    const contactUrl = contactPicMap.get(msg.from);
+                    if (contactUrl) msg.senderPictureUrl = contactUrl;
+                }
             }
         }
         const merged = allMessages.sort((a, b) => new Date(b._savedAt) - new Date(a._savedAt));

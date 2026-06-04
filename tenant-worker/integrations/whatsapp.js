@@ -15,6 +15,7 @@ async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
     const whatsappCol = tenantDb.collection('whatsapp');
     const outboxCol = tenantDb.collection('whatsapp_outbox');
     const profilePicsCol = tenantDb.collection('profile_pics');
+    const contactPicsCol = tenantDb.collection('contact_pics');
     const pictureCache = new Map();
 
     await onboardingCol.updateOne(
@@ -121,6 +122,32 @@ async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
                 console.error('[whatsapp] profile pic pre-population failed:', err.message);
             }
         })();
+
+        // Pre-populate contact pics (individual people, not groups) once a day
+        (async () => {
+            try {
+                const contacts = await client.getContacts();
+                const now = Date.now();
+                for (const contact of contacts) {
+                    const jid = contact.id?._serialized;
+                    if (!jid || jid.includes('@g.us') || jid.includes('@broadcast') || jid.includes('@lid')) continue;
+                    const existing = await contactPicsCol.findOne({ jid });
+                    if (existing && (now - new Date(existing._updatedAt).getTime() < 86400000)) continue;
+                    await new Promise(r => setTimeout(r, 150));
+                    try {
+                        const url = await client.getProfilePicUrl(jid) || '';
+                        await contactPicsCol.updateOne(
+                            { jid },
+                            { $set: { jid, url, _updatedAt: new Date() } },
+                            { upsert: true }
+                        );
+                    } catch {}
+                }
+                console.log('[whatsapp] contact pics pre-populated');
+            } catch (err) {
+                console.error('[whatsapp] contact pic pre-population failed:', err.message);
+            }
+        })();
     });
 
     const saveMessage = async msg => {
@@ -140,6 +167,20 @@ async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
                     fromName = contact.pushname || contact.name || '';
                 }
             } catch {}
+        }
+
+        // Refresh contact pic for group message sender (24h TTL)
+        if (msg.author) {
+            const existing = await contactPicsCol.findOne({ jid: msg.author });
+            if (!existing || (Date.now() - new Date(existing._updatedAt).getTime() > 86400000)) {
+                let url = '';
+                try { url = await client.getProfilePicUrl(msg.author) || ''; } catch {}
+                contactPicsCol.updateOne(
+                    { jid: msg.author },
+                    { $set: { jid: msg.author, url, _updatedAt: new Date() } },
+                    { upsert: true }
+                ).catch(() => {});
+            }
         }
 
         // Refresh profile pic for this chat and store in profile_pics collection.

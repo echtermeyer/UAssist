@@ -21,6 +21,7 @@ type InboxRow = {
   senderName: string
   isGroup: boolean
   pictureUrl?: string
+  senderPictureUrl?: string
 }
 
 type Conversation = {
@@ -72,6 +73,7 @@ function toInboxRow(msg: RawMessage): InboxRow {
     senderName,
     isGroup,
     pictureUrl: msg.pictureUrl,
+    senderPictureUrl: msg.senderPictureUrl,
   }
 }
 
@@ -193,7 +195,7 @@ function ConversationDetail({ conv, onClose }: { conv: Conversation; onClose: ()
                   <ConvAvatar
                     initial={(msg.senderName || conv.initial).charAt(0).toUpperCase()}
                     color={conv.color}
-                    pictureUrl={conv.pictureUrl}
+                    pictureUrl={msg.senderPictureUrl || conv.pictureUrl}
                     size={28}
                     className="msg-av"
                   />
