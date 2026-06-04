@@ -1,5 +1,5 @@
 const { MongoClient } = require('mongodb');
-const { decrypt, isEncrypted, getKey } = require('./lib/crypto');
+const { decrypt, isEncrypted } = require('./lib/crypto');
 const { runWhatsapp } = require('./integrations/whatsapp');
 const { runSignal } = require('./integrations/signal');
 const { runEmail } = require('./integrations/email');

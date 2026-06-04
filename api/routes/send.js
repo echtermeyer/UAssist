@@ -1,6 +1,8 @@
 const { Router } = require('express');
 const { getTenantDb } = require('../lib/db');
 const { sendMail } = require('../lib/mailer');
+const { getUserDataKey } = require('../lib/userkey');
+const { encryptWithKey } = require('../lib/crypto');
 
 const router = Router();
 
@@ -8,9 +10,10 @@ router.post('/whatsapp', async (req, res, next) => {
     const { to, message } = req.body;
     if (!to || !message) return res.status(400).json({ error: 'to and message are required' });
     try {
+        const dataKey = await getUserDataKey(req.user.username);
         const result = await getTenantDb(req.user.tenantId).collection('whatsapp_outbox').insertOne({
             to,
-            message,
+            message: encryptWithKey(message, dataKey),
             status: 'pending',
             tenantId: req.user.tenantId,
             _createdAt: new Date(),
@@ -25,9 +28,10 @@ router.post('/signal', async (req, res, next) => {
     const { to, message } = req.body;
     if (!to || !message) return res.status(400).json({ error: 'to and message are required' });
     try {
+        const dataKey = await getUserDataKey(req.user.username);
         const result = await getTenantDb(req.user.tenantId).collection('signal_outbox').insertOne({
             to,
-            message,
+            message: encryptWithKey(message, dataKey),
             status: 'pending',
             tenantId: req.user.tenantId,
             _createdAt: new Date(),
@@ -53,9 +57,10 @@ router.post('/slack', async (req, res, next) => {
     const { to, message } = req.body;
     if (!to || !message) return res.status(400).json({ error: 'to and message are required' });
     try {
+        const dataKey = await getUserDataKey(req.user.username);
         const result = await getTenantDb(req.user.tenantId).collection('slack_outbox').insertOne({
             to,
-            message,
+            message: encryptWithKey(message, dataKey),
             status: 'pending',
             tenantId: req.user.tenantId,
             _createdAt: new Date(),

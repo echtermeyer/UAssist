@@ -1,10 +1,29 @@
 const { Router } = require('express');
 const { getTenantDb } = require('../lib/db');
+const { getUserDataKey } = require('../lib/userkey');
+const { decryptWithKey, isEncrypted } = require('../lib/crypto');
 
 const router = Router();
 
 const SERVICES = ['whatsapp', 'signal', 'email'];
 const POLL_MS = 2000;
+
+const SERVICE_FIELDS = {
+    whatsapp: ['body'],
+    signal: ['message'],
+    email: ['bodyText', 'bodyHtml'],
+};
+
+function decryptDoc(doc, service, dataKey) {
+    const fields = SERVICE_FIELDS[service] || [];
+    const result = { ...doc };
+    for (const field of fields) {
+        if (result[field] && isEncrypted(result[field])) {
+            result[field] = decryptWithKey(result[field], dataKey);
+        }
+    }
+    return result;
+}
 
 router.get('/', async (req, res) => {
     const { tenantId } = req.user;
@@ -18,6 +37,7 @@ router.get('/', async (req, res) => {
     res.flushHeaders();
 
     const db = getTenantDb(tenantId);
+    const dataKey = await getUserDataKey(req.user.username);
 
     const ping = setInterval(() => res.write(': ping\n\n'), 20000);
     let closed = false;
@@ -32,7 +52,7 @@ router.get('/', async (req, res) => {
             );
             cs.on('change', change => {
                 if (!closed) {
-                    const doc = { ...change.fullDocument, _service: service };
+                    const doc = decryptDoc({ ...change.fullDocument, _service: service }, service, dataKey);
                     res.write(`data: ${JSON.stringify(doc)}\n\n`);
                 }
             });
@@ -59,7 +79,7 @@ router.get('/', async (req, res) => {
                         .find({ _savedAt: { $gt: lastSeen[service] } })
                         .sort({ _savedAt: 1 }).toArray();
                     for (const doc of docs) {
-                        res.write(`data: ${JSON.stringify({ ...doc, _service: service })}\n\n`);
+                        res.write(`data: ${JSON.stringify(decryptDoc({ ...doc, _service: service }, service, dataKey))}\n\n`);
                         lastSeen[service] = doc._savedAt;
                     }
                 }

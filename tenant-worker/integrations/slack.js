@@ -1,5 +1,5 @@
 const { App } = require('@slack/bolt');
-const { encryptWithKey } = require('../lib/crypto');
+const { encryptWithKey, decryptWithKey, isEncrypted } = require('../lib/crypto');
 
 async function runSlack(botToken, appToken, tenantId, tenantDb, dataKey) {
     const collection = tenantDb.collection('slack');
@@ -28,7 +28,8 @@ async function runSlack(botToken, appToken, tenantId, tenantDb, dataKey) {
         const pending = await outbox.find({ status: 'pending', tenantId }).toArray();
         for (const job of pending) {
             try {
-                await slackApp.client.chat.postMessage({ channel: job.to, text: job.message });
+                const plaintext = isEncrypted(job.message) ? decryptWithKey(job.message, dataKey) : job.message;
+                await slackApp.client.chat.postMessage({ channel: job.to, text: plaintext });
                 await outbox.updateOne({ _id: job._id }, { $set: { status: 'sent' } });
             } catch (e) {
                 await outbox.updateOne({ _id: job._id }, { $set: { status: 'failed', error: e.message } });

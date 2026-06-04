@@ -2,7 +2,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const path = require('path');
 const fs = require('fs');
-const { encryptWithKey } = require('../lib/crypto');
+const { encryptWithKey, decryptWithKey, isEncrypted } = require('../lib/crypto');
 
 const WA_DATA_PATH = process.env.HOME || '/home/tenant';
 const CHROMIUM_PATH = process.env.CHROMIUM_PATH || '/usr/bin/google-chrome';
@@ -71,7 +71,8 @@ async function runWhatsapp(tenantId, tenantDb, globalDb, dataKey) {
             const pending = await outboxCol.find({ status: 'pending', tenantId }).toArray();
             for (const job of pending) {
                 try {
-                    await client.sendMessage(`${job.to}@c.us`, job.message);
+                    const plaintext = isEncrypted(job.message) ? decryptWithKey(job.message, dataKey) : job.message;
+                    await client.sendMessage(`${job.to}@c.us`, plaintext);
                     await outboxCol.updateOne({ _id: job._id }, { $set: { status: 'sent' } });
                 } catch (e) {
                     await outboxCol.updateOne({ _id: job._id }, { $set: { status: 'failed', error: e.message } });
