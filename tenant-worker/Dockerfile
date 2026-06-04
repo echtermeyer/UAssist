@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y \
 ARG SIGNAL_VERSION=0.14.4.1
 RUN curl -fsSL "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_VERSION}/signal-cli-${SIGNAL_VERSION}-Linux-native.tar.gz" \
     | tar -xz -C /opt \
-    && ln -sf /opt/signal-cli-${SIGNAL_VERSION}/bin/signal-cli /usr/local/bin/signal-cli
+    && find /opt -name "signal-cli" -type f -exec ln -sf {} /usr/local/bin/signal-cli \;
 
 WORKDIR /app
 

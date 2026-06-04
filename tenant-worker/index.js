@@ -5,6 +5,14 @@ const { runSignal } = require('./integrations/signal');
 const { runEmail } = require('./integrations/email');
 const { runSlack } = require('./integrations/slack');
 
+process.on('uncaughtException', err => {
+    console.error('[tenant-worker] Uncaught exception:', err.message);
+});
+
+process.on('unhandledRejection', err => {
+    console.error('[tenant-worker] Unhandled rejection:', err.message);
+});
+
 const TENANT_ID = process.env.TENANT_ID;
 const MONGO_URL = process.env.MONGO_URL;
 
