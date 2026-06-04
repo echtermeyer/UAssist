@@ -3,7 +3,7 @@
 set -e
 
 EXTRA_ALLOW=""
-PORTS="22 3000"
+PORTS="3000"
 SETNAME="geoip-de"
 
 echo "[geoip] Downloading DE IP ranges..."
