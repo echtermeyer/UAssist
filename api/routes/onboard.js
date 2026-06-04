@@ -11,6 +11,10 @@ const router = Router();
 router.post('/whatsapp', async (req, res, next) => {
     const { tenantId } = req.user;
     try {
+        const existing = await getTenantDb(tenantId).collection('onboarding').findOne({ service: 'whatsapp' });
+        if (existing?.status === 'connected') {
+            return res.json({ status: 'connected' });
+        }
         await getTenantDb(tenantId).collection('onboarding').updateOne(
             { service: 'whatsapp' },
             { $set: { service: 'whatsapp', status: 'pending', qr: null, _updatedAt: new Date() } },
