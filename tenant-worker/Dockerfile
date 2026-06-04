@@ -16,8 +16,8 @@ RUN apt-get update && apt-get install -y \
     && rm /tmp/chrome.deb \
     && rm -rf /var/lib/apt/lists/*
 
-RUN SIGNAL_VERSION=$(curl -s https://api.github.com/repos/AsamK/signal-cli/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
-    && curl -fsSL "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_VERSION}/signal-cli-${SIGNAL_VERSION}-Linux.tar.gz" \
+ARG SIGNAL_VERSION=0.13.7
+RUN curl -fsSL "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_VERSION}/signal-cli-${SIGNAL_VERSION}-Linux.tar.gz" \
     | tar -xz -C /opt \
     && ln -sf /opt/signal-cli-${SIGNAL_VERSION}/bin/signal-cli /usr/local/bin/signal-cli
 
