@@ -82,7 +82,7 @@ jobs:
             REPO=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
             docker compose pull
             docker pull ghcr.io/$REPO/tenant-worker:latest
+            # Stop tenant workers before API restarts so reconcile recreates them with new image
+            docker ps --filter name=uassist-tenant- --format '{{.Names}}' | xargs -r -I{} sh -c 'docker stop {} && docker rm {}'
             docker compose down --remove-orphans
             docker compose up -d
-            # Restart tenant workers so they pick up the new image
-            docker ps --filter name=uassist-tenant- --format '{{.Names}}' | xargs -r -I{} sh -c 'docker stop {} && docker rm {}'
