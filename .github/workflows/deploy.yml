@@ -58,6 +58,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - uses: appleboy/ssh-action@v1.0.3
@@ -68,21 +71,5 @@ jobs:
           script: |
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             cd /home/deploy/UAssist
-            git pull origin main
-            REPO=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
-            cat > .env << EOF
-            GITHUB_REPOSITORY=$REPO
-            MONGO_ROOT_PASSWORD=${{ secrets.MONGO_ROOT_PASSWORD }}
-            MONGO_API_PASSWORD=${{ secrets.MONGO_API_PASSWORD }}
-            MONGO_URL=mongodb://uassist_api:${{ secrets.MONGO_API_PASSWORD }}@mongodb:27017/?authSource=admin
-            MONGO_ADMIN_URL=mongodb://mongoadmin:${{ secrets.MONGO_ROOT_PASSWORD }}@mongodb:27017/?authSource=admin
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            MASTER_ENCRYPTION_KEY=${{ secrets.MASTER_ENCRYPTION_KEY }}
-            ADMIN_PASS=${{ secrets.ADMIN_PASS }}
-            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
-            CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
-            COOKIE_SECURE=false
-            TENANT_WORKER_IMAGE=ghcr.io/$REPO/tenant-worker:latest
-            EOF
             docker compose pull
             docker compose up -d
