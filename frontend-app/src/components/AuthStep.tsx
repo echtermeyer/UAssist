@@ -82,7 +82,7 @@ export type AuthedUser = {
 type AuthStepProps = {
   initialMode?: "signup" | "login"
   initialName?: string
-  onAuthed: (user: AuthedUser) => void
+  onAuthed: (user: AuthedUser, isNew: boolean) => void
   onBack?: () => void
 }
 
@@ -127,7 +127,7 @@ export function AuthStep({ initialMode = "signup", initialName = "", onAuthed, o
       onAuthed({
         firstName: isSignup ? firstName.trim() || "User" : "User",
         phone: `${countryCode} ${phone}`,
-      })
+      }, isSignup)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed. Please try again.")
       setStage("form")

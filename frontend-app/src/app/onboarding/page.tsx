@@ -57,7 +57,7 @@ export default function OnboardingPage() {
     body = (
       <AuthStep
         initialMode="signup"
-        onAuthed={(u) => { setUser(u); goTo("whatsapp") }}
+        onAuthed={(u, isNew) => { setUser(u); if (isNew) goTo("whatsapp"); else router.replace("/home") }}
         onBack={() => goTo("intro", "back")}
       />
     )
