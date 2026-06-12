@@ -4,14 +4,27 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
     env_file: .env
+    environment:
+      AGENT_URL: http://worker-agent:8080
+      AGENT_AUTH_DISABLED: "true"
     networks:
       - uassist
     depends_on:
       mongodb:
         condition: service_healthy
+
+  worker-agent:
+    image: ghcr.io/${GITHUB_REPOSITORY}/worker-agent:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file: .env
+    environment:
+      AUTH_DISABLED: "true"
+      WORKER_MONGO_URL: ${MONGO_URL}
+    networks:
+      - uassist
 
   frontend:
     image: ghcr.io/${GITHUB_REPOSITORY}/frontend:latest

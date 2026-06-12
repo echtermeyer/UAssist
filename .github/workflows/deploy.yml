@@ -11,6 +11,7 @@ jobs:
       api: ${{ steps.filter.outputs.api }}
       frontend: ${{ steps.filter.outputs.frontend }}
       worker: ${{ steps.filter.outputs.worker }}
+      agent: ${{ steps.filter.outputs.agent }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -23,6 +24,8 @@ jobs:
               - 'frontend-app/**'
             worker:
               - 'tenant-worker/**'
+            agent:
+              - 'worker-agent/**'
 
   build-api:
     needs: changes
@@ -31,6 +34,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - name: Lowercase repo name
@@ -43,10 +48,13 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: ./api
           push: true
-          tags: ghcr.io/${{ steps.lower.outputs.repo }}/api:latest
+          tags: |
+            ghcr.io/${{ steps.lower.outputs.repo }}/api:latest
+            ghcr.io/${{ steps.lower.outputs.repo }}/api:${{ github.sha }}
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
@@ -57,6 +65,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - name: Lowercase repo name
@@ -69,14 +79,52 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: ./frontend-app
           push: true
-          tags: ghcr.io/${{ steps.lower.outputs.repo }}/frontend:latest
+          tags: |
+            ghcr.io/${{ steps.lower.outputs.repo }}/frontend:latest
+            ghcr.io/${{ steps.lower.outputs.repo }}/frontend:${{ github.sha }}
           build-args: |
             NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+  # Separate GCP frontend image: NEXT_PUBLIC_API_URL is baked at build time and
+  # differs between Hetzner and Cloud Run while both environments coexist.
+  build-frontend-gcp:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' && vars.GCP_NEXT_PUBLIC_API_URL != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lowercase repo name
+        id: lower
+        run: echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: ./frontend-app
+          push: true
+          tags: |
+            ghcr.io/${{ steps.lower.outputs.repo }}/frontend-gcp:latest
+            ghcr.io/${{ steps.lower.outputs.repo }}/frontend-gcp:${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.GCP_NEXT_PUBLIC_API_URL }}
+          cache-from: type=gha,scope=frontend-gcp
+          cache-to: type=gha,mode=max,scope=frontend-gcp
 
   build-worker:
     needs: changes
@@ -85,6 +133,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - name: Lowercase repo name
@@ -97,16 +147,51 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: ./tenant-worker
           push: true
-          tags: ghcr.io/${{ steps.lower.outputs.repo }}/tenant-worker:latest
+          tags: |
+            ghcr.io/${{ steps.lower.outputs.repo }}/tenant-worker:latest
+            ghcr.io/${{ steps.lower.outputs.repo }}/tenant-worker:${{ github.sha }}
           cache-from: type=gha,scope=worker
           cache-to: type=gha,mode=max,scope=worker
 
+  build-agent:
+    needs: changes
+    if: needs.changes.outputs.agent == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lowercase repo name
+        id: lower
+        run: echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: ./worker-agent
+          push: true
+          tags: |
+            ghcr.io/${{ steps.lower.outputs.repo }}/worker-agent:latest
+            ghcr.io/${{ steps.lower.outputs.repo }}/worker-agent:${{ github.sha }}
+          cache-from: type=gha,scope=agent
+          cache-to: type=gha,mode=max,scope=agent
+
+  # Hetzner deployment — disabled once cut over to GCP (vars.DEPLOY_HETZNER).
   deploy:
-    needs: [build-api, build-frontend, build-worker]
-    if: always() && !failure() && !cancelled()
+    needs: [build-api, build-frontend, build-worker, build-agent]
+    if: always() && !failure() && !cancelled() && vars.DEPLOY_HETZNER == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -136,3 +221,55 @@ jobs:
             docker compose down --remove-orphans
             docker compose up -d
             docker image prune -f
+
+  # GCP deployment: images flow GHCR → Artifact Registry remote (pull-through).
+  # Auth via Workload Identity Federation — no service account keys.
+  # Required repo variables (from `terraform output`): GCP_WIF_PROVIDER,
+  # GCP_DEPLOY_SA, GCP_AR_PREFIX, GCP_REGION, GCP_ZONE, GCP_NEXT_PUBLIC_API_URL.
+  deploy-gcp:
+    needs: [changes, build-api, build-frontend-gcp, build-worker, build-agent]
+    if: always() && !failure() && !cancelled() && vars.GCP_WIF_PROVIDER != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # Deploy by digest: the AR remote mirror caches tags, digests are exact.
+      - name: Deploy API to Cloud Run
+        if: needs.changes.outputs.api == 'true'
+        run: |
+          gcloud run deploy uassist-api \
+            --image "${{ vars.GCP_AR_PREFIX }}/api@${{ needs.build-api.outputs.digest }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --quiet
+
+      - name: Deploy frontend to Cloud Run
+        if: needs.changes.outputs.frontend == 'true'
+        run: |
+          gcloud run deploy uassist-frontend \
+            --image "${{ vars.GCP_AR_PREFIX }}/frontend-gcp@${{ needs.build-frontend-gcp.outputs.digest }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --quiet
+
+      - name: Refresh tenant-worker image on VM
+        if: needs.changes.outputs.worker == 'true'
+        run: |
+          gcloud compute ssh uassist-vm \
+            --zone "${{ vars.GCP_ZONE }}" \
+            --tunnel-through-iap \
+            --command "sudo /opt/uassist/ar-login.sh && sudo docker pull ${{ vars.GCP_AR_PREFIX }}/tenant-worker:latest"
+
+      - name: Restart worker-agent on VM (new agent image)
+        if: needs.changes.outputs.agent == 'true'
+        run: |
+          gcloud compute ssh uassist-vm \
+            --zone "${{ vars.GCP_ZONE }}" \
+            --tunnel-through-iap \
+            --command "sudo /opt/uassist/ar-login.sh && sudo docker compose --env-file /opt/uassist/.env -f /opt/uassist/docker-compose.yml pull worker-agent && sudo docker compose --env-file /opt/uassist/.env -f /opt/uassist/docker-compose.yml up -d worker-agent"

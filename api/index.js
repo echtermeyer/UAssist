@@ -11,6 +11,7 @@ const onboardRouter = require('./routes/onboard');
 const streamRouter = require('./routes/stream');
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(express.json());
 app.use(cookieParser());
 
@@ -80,7 +81,18 @@ connect().then(async () => {
         });
         console.log(`✅ Seeded admin user (password: ${adminPass})`);
     }
-    await reconcileTenantContainers();
+    // Reconcile must not block or kill startup: a worker-agent/VM outage
+    // would otherwise crash-loop the API. Retry in the background instead.
+    const reconcileWithRetry = async (attempt = 0) => {
+        try {
+            await reconcileTenantContainers();
+        } catch (err) {
+            const delay = Math.min(60000, 5000 * 2 ** attempt);
+            console.error(`Reconcile failed (retrying in ${delay / 1000}s):`, err.message);
+            setTimeout(() => reconcileWithRetry(attempt + 1), delay);
+        }
+    };
+    reconcileWithRetry();
     app.listen(3000, () => console.log('✅ API running on port 3000'));
 }).catch(err => {
     console.error('Fatal:', err.message);

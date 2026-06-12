@@ -8,7 +8,9 @@ const router = Router();
 const COOKIE_OPTS = {
     httpOnly: true,
     secure: process.env.COOKIE_SECURE === 'true',
-    sameSite: 'strict',
+    // 'none' is required on GCP: *.run.app is on the Public Suffix List, so
+    // the api and frontend services count as different sites.
+    sameSite: process.env.COOKIE_SAMESITE || 'strict',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
 };

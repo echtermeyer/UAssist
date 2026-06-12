@@ -1,108 +1,70 @@
-const Docker = require('dockerode');
-const { decryptUserDataKey } = require('./kms');
+// Tenant containers are managed by the worker-agent (worker-agent/), reached
+// over HTTP. On GCP the request carries a Google-signed ID token; with
+// AGENT_AUTH_DISABLED=true (local / single-VM compose) it is a plain request.
+const AGENT_URL = process.env.AGENT_URL;
+const AUTH_DISABLED = process.env.AGENT_AUTH_DISABLED === 'true';
 
-const docker = new Docker({ socketPath: '/var/run/docker.sock' });
-const DOCKER_NETWORK = process.env.DOCKER_NETWORK || 'uassist';
-const TENANT_IMAGE = process.env.TENANT_WORKER_IMAGE;
-
-function containerName(tenantId) {
-    return `uassist-tenant-${tenantId}`;
-}
-
-function volumeName(tenantId) {
-    return `uassist-tenant-${tenantId}`;
-}
-
-async function ensureVolume(name) {
-    try {
-        await docker.getVolume(name).inspect();
-    } catch (err) {
-        if (err.statusCode === 404) await docker.createVolume({ Name: name });
-        else throw err;
+let idTokenClient;
+async function agentFetch(path, body) {
+    if (!AGENT_URL) {
+        console.warn('AGENT_URL not set — skipping tenant container operation');
+        return null;
     }
+    const headers = { 'Content-Type': 'application/json' };
+    if (!AUTH_DISABLED) {
+        if (!idTokenClient) {
+            const { GoogleAuth } = require('google-auth-library');
+            idTokenClient = await new GoogleAuth().getIdTokenClient(AGENT_URL);
+        }
+        const idHeaders = await idTokenClient.getRequestHeaders(AGENT_URL);
+        headers.Authorization = idHeaders.get
+            ? idHeaders.get('authorization')
+            : idHeaders.Authorization;
+    }
+    const res = await fetch(`${AGENT_URL}${path}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body ?? {}),
+    });
+    if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`worker-agent ${path} failed: ${res.status} ${text}`);
+    }
+    return res.json();
 }
 
-async function startTenantContainer(tenantId) {
-    if (!TENANT_IMAGE) {
-        console.warn('TENANT_WORKER_IMAGE not set — skipping container start');
-        return;
-    }
-
+async function getEncryptedDataKey(tenantId) {
     const { getGlobalDb } = require('./db');
     const user = await getGlobalDb().collection('users').findOne(
         { tenantId },
         { projection: { encryptedDataKey: 1 } }
     );
-    if (!user?.encryptedDataKey) {
+    return user?.encryptedDataKey || null;
+}
+
+async function startTenantContainer(tenantId) {
+    const encryptedDataKey = await getEncryptedDataKey(tenantId);
+    if (!encryptedDataKey) {
         console.warn(`No encryptedDataKey for tenant ${tenantId} — skipping container start`);
         return;
     }
-    const dataKey = await decryptUserDataKey(user.encryptedDataKey);
-    const dataKeyHex = dataKey.toString('hex');
-
-    const name = containerName(tenantId);
-    const vol = volumeName(tenantId);
-    await ensureVolume(vol);
-
-    try {
-        const container = docker.getContainer(name);
-        const info = await container.inspect();
-        if (info.State.Running) return;
-        await container.start();
-        return;
-    } catch (err) {
-        if (err.statusCode !== 404) throw err;
-    }
-
-    const container = await docker.createContainer({
-        name,
-        Image: TENANT_IMAGE,
-        Env: [
-            `TENANT_ID=${tenantId}`,
-            `MONGO_URL=${process.env.MONGO_URL}`,
-            `USER_DATA_KEY=${dataKeyHex}`,
-        ],
-        HostConfig: {
-            Binds: [`${vol}:/home/tenant`],
-            RestartPolicy: { Name: 'unless-stopped' },
-        },
-        NetworkingConfig: {
-            EndpointsConfig: { [DOCKER_NETWORK]: {} },
-        },
-    });
-
-    await container.start();
-    console.log(`Started container for tenant ${tenantId}`);
+    await agentFetch(`/tenants/${encodeURIComponent(tenantId)}/start`, { encryptedDataKey });
 }
 
 async function restartTenantContainer(tenantId) {
-    const name = containerName(tenantId);
-    try {
-        const container = docker.getContainer(name);
-        await container.stop().catch(() => {});
-        await container.remove().catch(() => {});
-    } catch (err) {
-        if (err.statusCode !== 404) console.warn(`Could not remove ${name}:`, err.message);
+    const encryptedDataKey = await getEncryptedDataKey(tenantId);
+    if (!encryptedDataKey) {
+        console.warn(`No encryptedDataKey for tenant ${tenantId} — skipping container restart`);
+        return;
     }
-    await startTenantContainer(tenantId);
+    await agentFetch(`/tenants/${encodeURIComponent(tenantId)}/restart`, { encryptedDataKey });
 }
 
 async function stopTenantContainer(tenantId) {
-    const name = containerName(tenantId);
-    try {
-        const container = docker.getContainer(name);
-        await container.stop();
-        await container.remove();
-    } catch (err) {
-        if (err.statusCode !== 404) throw err;
-    }
+    await agentFetch(`/tenants/${encodeURIComponent(tenantId)}/stop`);
 }
 
 async function reconcileTenantContainers() {
-    if (!TENANT_IMAGE) {
-        console.warn('TENANT_WORKER_IMAGE not set — skipping reconciliation');
-        return;
-    }
     const { getGlobalDb } = require('./db');
     const users = await getGlobalDb().collection('users').find({
         $or: [
@@ -111,14 +73,14 @@ async function reconcileTenantContainers() {
             { 'onboarding.email': { $exists: true } },
             { 'onboarding.slack': { $exists: true } },
         ],
-    }).toArray();
+    }, { projection: { tenantId: 1, encryptedDataKey: 1 } }).toArray();
 
-    for (const user of users) {
-        await startTenantContainer(user.tenantId).catch(err =>
-            console.error(`Failed to start container for ${user.tenantId}:`, err.message)
-        );
-    }
-    console.log(`Reconciled ${users.length} tenant containers`);
+    const tenants = users
+        .filter(u => u.encryptedDataKey)
+        .map(u => ({ tenantId: u.tenantId, encryptedDataKey: u.encryptedDataKey }));
+
+    const result = await agentFetch('/tenants/reconcile', tenants);
+    if (result) console.log(`Reconciled ${result.started}/${result.total} tenant containers`);
 }
 
 module.exports = { startTenantContainer, restartTenantContainer, stopTenantContainer, reconcileTenantContainers };
