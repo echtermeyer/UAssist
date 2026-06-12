@@ -1,0 +1,200 @@
+#cloud-config
+package_update: true
+
+packages:
+  - docker.io
+  - docker-compose-v2
+  - jq
+
+# The attached data disk holds MongoDB data and the Docker data root
+# (tenant session volumes) — formatted only on first boot.
+fs_setup:
+  - label: uassist-data
+    filesystem: ext4
+    device: /dev/disk/by-id/google-mongo-data
+    partition: none
+    overwrite: false
+
+mounts:
+  - [/dev/disk/by-id/google-mongo-data, /mnt/disks/data, ext4, "defaults,nofail", "0", "2"]
+
+write_files:
+  - path: /etc/docker/daemon.json
+    permissions: "0644"
+    content: |
+      {
+        "data-root": "/mnt/disks/data/docker",
+        "log-driver": "json-file",
+        "log-opts": { "max-size": "10m", "max-file": "3" }
+      }
+
+  - path: /opt/uassist/docker-compose.yml
+    permissions: "0644"
+    content: |
+      services:
+        mongodb:
+          image: mongo:7
+          container_name: uassist-mongodb
+          restart: unless-stopped
+          command: ["--replSet", "rs0", "--keyFile", "/etc/mongo-keyfile", "--auth", "--bind_ip_all"]
+          ports:
+            - "27017:27017"
+          volumes:
+            - /mnt/disks/data/mongo:/data/db
+            - /opt/uassist/mongo-init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+            - /mnt/disks/data/mongo-keyfile:/etc/mongo-keyfile:ro
+          environment:
+            MONGO_INITDB_ROOT_USERNAME: mongoadmin
+            MONGO_INITDB_ROOT_PASSWORD: $${MONGO_ROOT_PASSWORD}
+            MONGO_API_PASSWORD: $${MONGO_API_PASSWORD}
+          healthcheck:
+            test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+          networks:
+            - uassist
+
+        worker-agent:
+          image: ${ar_repo_prefix}/worker-agent:latest
+          container_name: uassist-worker-agent
+          restart: unless-stopped
+          ports:
+            - "8080:8080"
+          volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+          environment:
+            AUTH_DISABLED: "false"
+            AGENT_AUDIENCE: ${agent_audience}
+            ALLOWED_SA_EMAILS: ${allowed_sa_email}
+            KMS_KEY_NAME: ${kms_key_name}
+            TENANT_WORKER_IMAGE: ${tenant_worker_image}
+            DOCKER_NETWORK: uassist
+            WORKER_MONGO_URL: $${WORKER_MONGO_URL}
+          networks:
+            - uassist
+          depends_on:
+            mongodb:
+              condition: service_healthy
+
+      networks:
+        uassist:
+          name: uassist
+          external: true
+
+  - path: /opt/uassist/mongo-init.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      # Runs once when the MongoDB container is first created.
+      set -e
+      mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
+          --authenticationDatabase admin \
+          --eval "
+              db.getSiblingDB('admin').createUser({
+                  user: 'uassist_api',
+                  pwd: '$MONGO_API_PASSWORD',
+                  roles: [{ role: 'readWriteAnyDatabase', db: 'admin' }]
+              });
+              print('uassist_api user created');
+          "
+
+  - path: /opt/uassist/fetch-secrets.sh
+    permissions: "0700"
+    content: |
+      #!/bin/bash
+      # Fetch runtime secrets from Secret Manager using the VM service account.
+      # Keeps secrets out of instance metadata and Terraform state.
+      set -euo pipefail
+
+      TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
+        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+        | jq -r .access_token)
+
+      get_secret() {
+        curl -sf -H "Authorization: Bearer $TOKEN" \
+          "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/$1/versions/latest:access" \
+          | jq -r .payload.data | base64 -d
+      }
+
+      MONGO_ROOT_PASSWORD=$(get_secret mongo-root-password)
+      MONGO_API_PASSWORD=$(get_secret mongo-api-password)
+
+      umask 177
+      cat > /opt/uassist/.env <<EOF
+      MONGO_ROOT_PASSWORD=$MONGO_ROOT_PASSWORD
+      MONGO_API_PASSWORD=$MONGO_API_PASSWORD
+      WORKER_MONGO_URL=mongodb://uassist_api:$MONGO_API_PASSWORD@mongodb:27017/?authSource=admin&directConnection=true
+      EOF
+
+  - path: /opt/uassist/ar-login.sh
+    permissions: "0700"
+    content: |
+      #!/bin/bash
+      # Log in to Artifact Registry with a fresh VM service-account token
+      # (tokens expire after ~1h, so re-run before every pull).
+      set -euo pipefail
+      curl -sf -H "Metadata-Flavor: Google" \
+        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+        | jq -r .access_token \
+        | docker login -u oauth2accesstoken --password-stdin https://${registry_host}
+
+  - path: /opt/uassist/start.sh
+    permissions: "0700"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      /opt/uassist/fetch-secrets.sh
+
+      # MongoDB keyFile (required for --replSet with auth), first boot only.
+      if [ ! -f /mnt/disks/data/mongo-keyfile ]; then
+        openssl rand -base64 756 > /mnt/disks/data/mongo-keyfile
+        chmod 400 /mnt/disks/data/mongo-keyfile
+        chown 999:999 /mnt/disks/data/mongo-keyfile
+      fi
+      mkdir -p /mnt/disks/data/mongo
+      chown -R 999:999 /mnt/disks/data/mongo
+
+      /opt/uassist/ar-login.sh
+
+      docker network inspect uassist >/dev/null 2>&1 || docker network create uassist
+
+      docker compose --env-file /opt/uassist/.env -f /opt/uassist/docker-compose.yml up -d
+
+      # Initiate the single-node replica set (enables Mongo change streams).
+      source /opt/uassist/.env
+      for i in $(seq 1 30); do
+        if docker exec uassist-mongodb mongosh -u mongoadmin -p "$MONGO_ROOT_PASSWORD" \
+            --authenticationDatabase admin --quiet --eval \
+            'try { rs.status().ok } catch (e) { rs.initiate({_id: "rs0", members: [{_id: 0, host: "mongodb:27017"}]}).ok }' \
+            >/dev/null 2>&1; then
+          echo "replica set ready"
+          break
+        fi
+        sleep 5
+      done
+
+      # Pre-pull the tenant worker image so first onboarding is fast.
+      docker pull ${tenant_worker_image} || true
+
+  - path: /etc/systemd/system/uassist.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=UAssist VM stack (MongoDB + worker-agent)
+      After=docker.service network-online.target
+      Requires=docker.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/opt/uassist/start.sh
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - systemctl restart docker
+  - systemctl daemon-reload
+  - systemctl enable --now uassist.service

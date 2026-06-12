@@ -1,0 +1,8 @@
+project_id    = "your-gcp-project"
+github_repo   = "echtermeyer/UAssist"
+ghcr_username = "echtermeyer"
+
+# region          = "europe-west3"
+# zone            = "europe-west3-a"
+# vm_machine_type = "e2-medium"
+# data_disk_size_gb = 50

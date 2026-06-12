@@ -1,8 +1,15 @@
 # Deployment
 
+UAssist supports two deployment targets:
+
+1. **Single VM (Hetzner-style)** — everything on one host via Docker Compose. See [Infrastructure](#infrastructure) below.
+2. **GCP (Terraform)** — Cloud Run for api/frontend, one private GCE VM for MongoDB + tenant workers. See [GCP Deployment](#gcp-deployment-terraform).
+
+In both targets, images are built by GitHub Actions and pushed to **GHCR** — GHCR stays the single source of truth; GCP pulls through an Artifact Registry remote (pull-through mirror), so no GCP build tooling is involved.
+
 ## Infrastructure
 
-UAssist runs on a single Ubuntu 24.04 VM using **Docker Compose**. Three long-lived containers are managed by Compose; tenant-worker containers are spawned and removed dynamically by the API.
+UAssist runs on a single Ubuntu 24.04 VM using **Docker Compose**. Long-lived containers (api, frontend, mongodb, worker-agent) are managed by Compose; tenant-worker containers are spawned and removed dynamically by the **worker-agent**, which the API calls over HTTP (`AGENT_URL`). On a single host the agent runs with `AUTH_DISABLED=true`; on GCP requests carry Google-signed OIDC ID tokens.
 
 ```
 VM
@@ -47,7 +54,14 @@ Three jobs run in parallel, each:
 
 ### Deploy stage
 
-After all builds succeed, a single deploy job:
+Two deploy jobs run after the builds, each gated by a repository variable:
+
+| Job | Gate | Target |
+|---|---|---|
+| `deploy` | `vars.DEPLOY_HETZNER == 'true'` | SSH to the VM, compose pull/up |
+| `deploy-gcp` | `vars.GCP_WIF_PROVIDER != ''` | `gcloud run deploy` by image digest + worker image refresh on the VM via IAP |
+
+The Hetzner deploy job:
 
 1. SSHs into the VM as the `deploy` user
 2. Pulls all three images from GHCR
@@ -198,3 +212,103 @@ docker ps
 ```
 
 There is no centralized log aggregation or alerting configured. For production use, forwarding logs to a service like Loki, Datadog, or CloudWatch would be the recommended next step.
+
+---
+
+# GCP Deployment (Terraform)
+
+```
+                    Internet
+                       │ HTTPS (*.run.app, managed TLS)
+        ┌──────────────┴──────────────┐
+        ▼                             ▼
+┌─ Cloud Run ─────┐         ┌─ Cloud Run ─────┐
+│ uassist-frontend│         │   uassist-api   │
+└─────────────────┘         └────────┬────────┘
+                                     │ direct VPC egress (10.10.1.0/26)
+                       ┌─────────────┼──────────────┐
+                       ▼ :8080 (OIDC)▼ :27017       │ VPC "uassist"
+              ┌─ GCE VM (no external IP, 10.10.0.10) ─┐
+              │  worker-agent ──► Docker              │
+              │  mongodb (rs0)   tenant-worker-<id>…  │
+              │  data disk: /mnt/disks/data (snapshots)│
+              └────────────────────┬──────────────────┘
+                                   │ Cloud NAT (egress only)
+                                   ▼ WhatsApp / Signal / IMAP / Slack
+```
+
+Security posture:
+- The VM has **no external IP**; SSH only via IAP; MongoDB and the worker-agent are reachable only from the API's egress subnet (firewall).
+- The worker-agent verifies **Google-signed OIDC ID tokens** and only accepts the API's service account. The plaintext user data key never transits the network — the API sends the *encrypted* key and the agent decrypts via Cloud KMS.
+- Envelope encryption uses **GCP Cloud KMS** (`KMS_KEY_NAME`); auth is via attached service accounts — no static cloud credentials anywhere.
+- GitHub Actions deploys via **Workload Identity Federation** (no SA keys), restricted to this repository.
+- Secrets live in **Secret Manager**; values never enter Terraform state.
+- Note: the iptables GeoIP filter has no equivalent here (would require a load balancer + Cloud Armor); exposure control is TLS + auth + rate limiting.
+
+## Bootstrap
+
+```bash
+# 0. One-time prerequisites
+gcloud auth application-default login
+gsutil mb -l europe-west3 gs://<your-tf-state-bucket>
+
+# 1. Provision
+cd infra
+cp terraform.tfvars.example terraform.tfvars   # fill in project, repo, ghcr user
+terraform init -backend-config="bucket=<your-tf-state-bucket>"
+terraform apply
+
+# 2. Add secret values (never via Terraform)
+echo -n '<value>' | gcloud secrets versions add jwt-secret --data-file=-
+# ...same for: admin-pass, mongo-root-password, mongo-api-password,
+#    mongo-url, mongo-admin-url, smtp-user, smtp-pass, ghcr-pull-token
+# mongo-url / mongo-admin-url shapes come from:
+terraform output mongo_url_example
+
+# 3. Set GitHub repository variables (values from `terraform output`)
+#    GCP_WIF_PROVIDER, GCP_DEPLOY_SA, GCP_AR_PREFIX, GCP_REGION, GCP_ZONE,
+#    GCP_NEXT_PUBLIC_API_URL (= api_url output)
+
+# 4. Push to main → CI builds to GHCR and deploys to Cloud Run
+```
+
+The Cloud Run URLs are **deterministic** (`https://<service>-<project-number>.<region>.run.app`), so `NEXT_PUBLIC_API_URL` is known before the first deploy.
+
+The `ghcr-pull-token` secret is a GitHub PAT with `read:packages` used by the Artifact Registry remote repository to pull from GHCR. **It expires** — rotate it or pulls fail silently.
+
+## Cutover from Hetzner
+
+1. Deploy code to Hetzner first and verify the worker-agent path still works (`AGENT_AUTH_DISABLED=true`).
+2. Bring up GCP (bootstrap above).
+3. Maintenance window:
+   ```bash
+   # on Hetzner: stop the api so no new writes/keys are created
+   docker compose stop api frontend
+   # re-encrypt user keys AWS KMS → Cloud KMS (idempotent, supports --dry-run)
+   cd api && node ../scripts/migrate-kms.js
+   # dump and restore Mongo to the GCP VM
+   mongodump --uri "$MONGO_ADMIN_URL" --out dump/
+   gcloud compute start-iap-tunnel uassist-vm 27017 --local-host-port=localhost:27017 &
+   mongorestore --uri "mongodb://mongoadmin:<pass>@localhost:27017/?authSource=admin&directConnection=true" --drop dump/
+   ```
+4. Verify on the GCP URLs: login as an existing user (proves KMS migration), fresh signup, WhatsApp onboarding QR via SSE, message send/receive, `docker ps` on the VM shows tenant containers.
+5. Set `DEPLOY_HETZNER` repo variable to `false`. Later: remove `@aws-sdk/client-kms` from api/ and worker-agent/.
+
+## Operations
+
+```bash
+# SSH (via IAP, no public port)
+gcloud compute ssh uassist-vm --zone europe-west3-a --tunnel-through-iap
+
+# Logs
+gcloud run services logs read uassist-api --region europe-west3
+sudo docker logs uassist-worker-agent -f         # on the VM
+sudo docker logs uassist-tenant-<tenantId> -f    # on the VM
+
+# Restore the data disk from a snapshot
+gcloud compute snapshots list --filter="sourceDisk:uassist-data"
+# create a disk from the snapshot, detach uassist-data, attach the new disk
+# as device-name "mongo-data", reboot the VM
+```
+
+Tenant state (WhatsApp Chromium session, signal-cli accounts) lives in Docker named volumes under the Docker data root, which is on the snapshotted data disk — VM recreation does not lose sessions as long as the data disk survives.
